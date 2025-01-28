@@ -82,8 +82,8 @@ struct LanguageObject {
     direction: Option<String>,
 }
 /// <https://www.w3.org/TR/vc-data-model-2.0/#status>
-#[derive(Serialize, Deserialize, Debug)]
 #[serde_as]
+#[derive(Serialize, Deserialize, Debug)]
 struct Status {
     #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
     id: Option<String>,
@@ -93,7 +93,6 @@ struct Status {
 }
 /// <https://www.w3.org/TR/vc-data-model-2.0/#data-schemas>
 #[derive(Serialize, Deserialize, Debug)]
-#[serde_as]
 struct CredentialSchema {
     id: String,
     #[serde(rename = "type")]
