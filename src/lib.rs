@@ -5,32 +5,45 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::serde_as;
 
+/// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - https://www.w3.org/TR/vc-data-model-2.0
 #[derive(Serialize, Deserialize, Debug)]
 #[serde_as]
 #[serde(deny_unknown_fields)]
-struct VerifiableCredential {
+pub struct VerifiableCredential {
+    /// https://www.w3.org/TR/vc-data-model-2.0/#contexts
     #[serde(rename = "@context")]
     context: Vec<String>,
+    /// https://www.w3.org/TR/vc-data-model-2.0/#identifiers
     id: Option<String>,
+    /// https://www.w3.org/TR/vc-data-model-2.0/#types
     #[serde(rename = "type")]
     #[serde_as(as = "OneOrMany<_, PreferOne>")]
     credential_type: Vec<String>,
+    /// https://www.w3.org/TR/vc-data-model-2.0/#names-and-descriptions
     #[serde(skip_serializing_if = "Option::is_none")]
     name: Option<LanguageValue>,
+    /// https://www.w3.org/TR/vc-data-model-2.0/#names-and-descriptions
     #[serde(skip_serializing_if = "Option::is_none")]
     description: Option<LanguageValue>,
+    /// https://www.w3.org/TR/vc-data-model-2.0/#issuer
     issuer: Issuer,
+    /// https://www.w3.org/TR/vc-data-model-2.0/#credential-subject
     #[serde(rename = "credentialSubject")]
     credential_subject: Value,
+    /// https://www.w3.org/TR/vc-data-model-2.0/#validity-period
     #[serde(rename = "validFrom", skip_serializing_if = "Option::is_none")]
     valid_from: Option<DateTime<Utc>>,
+    /// https://www.w3.org/TR/vc-data-model-2.0/#validity-period
     #[serde(rename = "validUntil", skip_serializing_if = "Option::is_none")]
     valid_until: Option<DateTime<Utc>>,
+    /// https://www.w3.org/TR/vc-data-model-2.0/#status
     #[serde(rename = "credentialStatus", skip_serializing_if = "Option::is_none")]
     credential_status: Option<Status>,
+    /// https://www.w3.org/TR/vc-data-model-2.0/#data-schemas
     #[serde_as(as = "OneOrMany<_, PreferOne>")]
     #[serde(rename = "credentialSchema", skip_serializing_if = "Option::is_none")]
     credential_schema: Option<CredentialSchema>,
+    /// https://www.w3.org/TR/vc-data-model-2.0/#securing-mechanisms
     #[serde(skip_serializing_if = "Option::is_none")]
     proof: Option<Proof>,
 }
@@ -55,7 +68,7 @@ enum LanguageValue {
     PlainString(String),
     LanguageObject(LanguageObject),
 }
-
+/// https://www.w3.org/TR/vc-data-model-2.0/#language-and-base-direction
 #[derive(Serialize, Deserialize, Debug)]
 struct LanguageObject {
     #[serde(rename = "@value")]
@@ -65,7 +78,7 @@ struct LanguageObject {
     #[serde(rename = "@direction", skip_serializing_if = "Option::is_none")]
     direction: Option<String>,
 }
-
+/// https://www.w3.org/TR/vc-data-model-2.0/#status
 #[derive(Serialize, Deserialize, Debug)]
 #[serde_as]
 struct Status {
@@ -75,7 +88,7 @@ struct Status {
     #[serde_as(as = "OneOrMany<_, PreferOne>")]
     status_type: Vec<String>,
 }
-
+/// https://www.w3.org/TR/vc-data-model-2.0/#data-schemas
 #[derive(Serialize, Deserialize, Debug)]
 #[serde_as]
 struct CredentialSchema {
@@ -84,6 +97,7 @@ struct CredentialSchema {
     schema_type: String,
 }
 
+/// https://www.w3.org/TR/vc-data-integrity/#proofs
 #[derive(Serialize, Deserialize, Debug)]
 #[serde_as]
 struct Proof {
@@ -119,6 +133,7 @@ struct Proof {
 mod tests {
     use super::*;
 
+    /// Test that a valid Verifiable Credential can be deserialized
     #[test]
     fn valid_vc_deserializes() {
         let vc: VerifiableCredential =
@@ -128,6 +143,7 @@ mod tests {
         assert!(serde_json::to_string(&vc).is_ok());
     }
 
+    /// Test that an invalid Verifiable Credential fails to deserialize
     #[test]
     fn invalid_vc_fails_to_deserialize() {
         let vc: Result<VerifiableCredential, _> =
