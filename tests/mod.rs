@@ -139,4 +139,40 @@ mod tests {
 
         assert_ne!(vc, new_signed_vc);
     }
+
+    #[test]
+
+    fn sign_with_schema_check_url() {
+        let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
+            "test_data/verifiable_credentials/unsigned_one_or_many.json"
+        ))
+        .expect("Failed to deserialize JSON");
+
+        let private_key = std::fs::read("tests/test_data/keys/private_key.pkcs8")
+            .expect("Error reading private key from file");
+
+        let signed_vc = vc
+            .sign_with_schema_check_from_url(&private_key, "https://json.schemastore.org/any.json")
+            .expect("Failed to sign VC");
+
+        assert!(serde_json::to_string(&signed_vc).is_ok());
+    }
+
+    #[test]
+    fn sign_with_schema_check_url_fails() {
+        let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
+            "test_data/verifiable_credentials/unsigned_one_or_many.json"
+        ))
+        .expect("Failed to deserialize JSON");
+
+        let private_key = std::fs::read("tests/test_data/keys/private_key.pkcs8")
+            .expect("Error reading private key from file");
+
+        let signed_vc = vc.sign_with_schema_check_from_url(
+            &private_key,
+            "http://localhost:8000/DoesNotExist.json",
+        );
+
+        assert!(signed_vc.is_err());
+    }
 }

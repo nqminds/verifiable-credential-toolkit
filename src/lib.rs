@@ -205,6 +205,46 @@ impl UnsignedVerifiableCredential {
             proof,
         })
     }
+
+    pub fn sign_with_schema_check_from_url(
+        self,
+        private_key: &[u8],
+        schema_url: &str,
+    ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
+        // Attempt to get the schema from the URL using reqwest
+
+        let schema: Value = serde_json::from_str(&reqwest::blocking::get(schema_url)?.text()?)?;
+
+        // Validate the credentialSubject against the schema
+        let credential_subject = &self.credential_subject;
+        if !jsonschema::is_valid(&schema, credential_subject) {
+            return Err("Credential subject does not match schema".into());
+        }
+
+        // Proceed with signing if validation is successful
+        let private_key = Ed25519KeyPair::from_pkcs8(private_key).map_err(|e| e.to_string())?;
+        let proof_value = private_key.sign(self.id.as_ref().unwrap().as_bytes());
+
+        let proof: Proof = Proof {
+            id: None,
+            proof_type: "Ed25519Signature2018".to_string(),
+            proof_purpose: "assertionMethod".to_string(),
+            verification_method: None,
+            cryptosuite: None,
+            created: None,
+            expires: None,
+            domain: None,
+            challenge: None,
+            proof_value: BASE64_STANDARD.encode(proof_value.as_ref()),
+            previous_proof: None,
+            nonce: None,
+        };
+
+        Ok(VerifiableCredential {
+            unsigned: self,
+            proof,
+        })
+    }
 }
 
 impl VerifiableCredential {
