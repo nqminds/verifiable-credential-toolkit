@@ -55,6 +55,7 @@ enum Issuer {
     Object(IssuerObject),
 }
 
+/// <https://www.w3.org/TR/vc-data-model-2.0/#issuer>
 #[derive(Serialize, Deserialize, Debug)]
 struct IssuerObject {
     id: String,
@@ -68,6 +69,7 @@ enum LanguageValue {
     PlainString(String),
     LanguageObject(LanguageObject),
 }
+
 /// <https://www.w3.org/TR/vc-data-model-2.0/#language-and-base-direction>
 #[derive(Serialize, Deserialize, Debug)]
 struct LanguageObject {
