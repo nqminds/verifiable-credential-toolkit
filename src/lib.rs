@@ -3,11 +3,12 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use serde_with::serde_as;
+use serde_with::formats::PreferOne;
+use serde_with::{serde_as, OneOrMany};
 
 /// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - <https://www.w3.org/TR/vc-data-model-2.0>
-#[derive(Serialize, Deserialize, Debug)]
 #[serde_as]
+#[derive(Serialize, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
 pub struct VerifiableCredential {
     /// <https://www.w3.org/TR/vc-data-model-2.0/#contexts>
@@ -40,9 +41,9 @@ pub struct VerifiableCredential {
     #[serde(rename = "credentialStatus", skip_serializing_if = "Option::is_none")]
     credential_status: Option<Status>,
     /// <https://www.w3.org/TR/vc-data-model-2.0/#data-schemas>
-    #[serde_as(as = "OneOrMany<_, PreferOne>")]
+    #[serde_as(as = "Option<OneOrMany<_, PreferOne>>")]
     #[serde(rename = "credentialSchema", skip_serializing_if = "Option::is_none")]
-    credential_schema: Option<CredentialSchema>,
+    credential_schema: Option<Vec<CredentialSchema>>,
     /// <https://www.w3.org/TR/vc-data-model-2.0/#securing-mechanisms>
     #[serde(skip_serializing_if = "Option::is_none")]
     proof: Option<Proof>,
@@ -100,8 +101,8 @@ struct CredentialSchema {
 }
 
 /// <https://www.w3.org/TR/vc-data-integrity/#proofs>
-#[derive(Serialize, Deserialize, Debug)]
 #[serde_as]
+#[derive(Serialize, Deserialize, Debug)]
 struct Proof {
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
@@ -118,7 +119,7 @@ struct Proof {
     #[serde(skip_serializing_if = "Option::is_none")]
     expires: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde_as(as = "OneOrMany<_, PreferOne>")]
+    #[serde_as(as = "Option<OneOrMany<_, PreferOne>>")]
     domain: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     challenge: Option<String>,
@@ -126,7 +127,7 @@ struct Proof {
     proof_value: String,
     #[serde(rename = "previousProof", skip_serializing_if = "Option::is_none")]
     previous_proof: Option<String>,
-    #[serde_as(as = "OneOrMany<_, PreferOne>")]
+    #[serde_as(as = "Option<OneOrMany<_, PreferOne>>")]
     #[serde(skip_serializing_if = "Option::is_none")]
     nonce: Option<Vec<String>>,
 }
@@ -152,5 +153,21 @@ mod tests {
             serde_json::from_str(include_str!("../test_data/henryTrustPhoneInvalid.json"));
 
         assert!(vc.is_err());
+    }
+
+    /// Test that the OneOrMany<_, PreferOne> serde_as helper works as expected
+    #[test]
+    fn one_or_many_test() {
+        let vc: VerifiableCredential =
+            serde_json::from_str(include_str!("../test_data/unsigned_one_or_many.json"))
+                .expect("Failed to deserialize JSON");
+
+        // Test that the single string is deserialized correctly
+        assert!(serde_json::to_string(&vc).is_ok());
+
+        let json_vc = serde_json::to_string(&vc).unwrap();
+
+        // Test that the vec is correctly serialized into a single string
+        assert!(json_vc.contains(r#""type":"VerifiableCredential""#));
     }
 }
