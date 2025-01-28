@@ -1,0 +1,22 @@
+{
+  "@context": ["https://www.w3.org/ns/credentials/v2"],
+  "id": "urn:uuid:9a3e3c0e-2db0-412a-95c7-cf5520ba78df",
+  "type": ["VerifiableCredential", "UserCredential"],
+  "issuer": "https://nqminds.example.com/issuer/1",
+  "validFrom": "2024-08-22T13:53:32.295644150Z",
+  "credentialSchema": {
+    "id": "https://github.com/nqminds/ClaimCascade/tree/main/example_vcs_for_cahn/schemas/device.json",
+    "type": "JsonSchema"
+  },
+  "credentialSubject": {
+    "id": "HenryTrustPhone-id",
+    "name": "HenryTrustPhone"
+  },
+  "proof": {
+    "type": "DataIntegrityProof",
+    "created": "2024-12-23T11:05:52.755708906Z",
+    "cryptosuite": "eddsa-rdfc-2022",
+    "proofPurpose": "assertionMethod",
+    "proofValue": "a/sTLprTw8m+DCOO2+pRVBh3m98df5tqcHdAkJFmeRxbxH8RWrtpwABDXwGZLMV/sSuibsSuC0qpdQ+64YGkBA=="
+  }
+}
