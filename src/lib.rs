@@ -111,7 +111,7 @@ struct CredentialSchema {
 /// <https://www.w3.org/TR/vc-data-integrity/#proofs>
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
-pub struct Proof {
+struct Proof {
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     #[serde(rename = "type")]
