@@ -6,11 +6,11 @@ use serde_json::Value;
 use serde_with::formats::PreferOne;
 use serde_with::{serde_as, OneOrMany};
 
-/// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - <https://www.w3.org/TR/vc-data-model-2.0>
+/// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - <https://www.w3.org/TR/vc-data-model-2.0> WITHOUT the proof
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(deny_unknown_fields)]
-pub struct VerifiableCredential {
+pub struct UnsignedVerifiableCredential {
     /// <https://www.w3.org/TR/vc-data-model-2.0/#contexts>
     #[serde(rename = "@context")]
     context: Vec<String>,
@@ -44,9 +44,16 @@ pub struct VerifiableCredential {
     #[serde_as(as = "Option<OneOrMany<_, PreferOne>>")]
     #[serde(rename = "credentialSchema", skip_serializing_if = "Option::is_none")]
     credential_schema: Option<Vec<CredentialSchema>>,
-    /// <https://www.w3.org/TR/vc-data-model-2.0/#securing-mechanisms>
-    #[serde(skip_serializing_if = "Option::is_none")]
-    proof: Option<Proof>,
+}
+
+/// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - <https://www.w3.org/TR/vc-data-model-2.0>, this adds the proof to the UnsignedVerifiableCredential struct
+#[serde_as]
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
+pub struct VerifiableCredential {
+    #[serde(flatten)]
+    unsigned: UnsignedVerifiableCredential,
+    proof: Proof,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -157,7 +164,7 @@ mod tests {
     /// Test that the OneOrMany<_, PreferOne> serde_as helper works as expected
     #[test]
     fn one_or_many_test() {
-        let vc: VerifiableCredential =
+        let vc: UnsignedVerifiableCredential =
             serde_json::from_str(include_str!("../test_data/unsigned_one_or_many.json"))
                 .expect("Failed to deserialize JSON");
 
