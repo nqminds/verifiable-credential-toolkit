@@ -9,7 +9,7 @@
     "type": "JsonSchema"
   },
   "credentialSubject": {
-    "id": "HenryTrustPhone-id",
-    "name": "HenryTrustPhone"
+    "name": "HenryTrustPhone",
+    "id": "HenryTrustPhone-id"
   }
 }
