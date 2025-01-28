@@ -10,3 +10,4 @@ chrono = { version = "0.4.39", features = ["serde"] }
 serde_with = "3.12.0"
 ring = "0.17.8"
 base64 = "0.22.1"
+jsonschema = "0.28.3"

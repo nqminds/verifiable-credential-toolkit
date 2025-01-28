@@ -1,0 +1,18 @@
+{
+  "$id": "https://github.com/nqminds/ClaimCascade/tree/main/example_vcs_for_cahn/schemas/device.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "A device",
+  "properties": {
+    "id": {
+      "description": "id of the device",
+      "type": "string"
+    },
+    "name": {
+      "description": "user friendly name of the device",
+      "type": "string"
+    }
+  },
+  "required": ["id"],
+  "title": "device",
+  "type": "object"
+}

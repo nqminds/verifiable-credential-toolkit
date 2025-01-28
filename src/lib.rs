@@ -168,6 +168,44 @@ impl UnsignedVerifiableCredential {
             proof,
         })
     }
+
+    pub fn sign_with_schema_check(
+        self,
+        private_key: &[u8],
+        schema: &str,
+    ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
+        // Validate the credentialSubject against the provided schema
+        let schema: Value = serde_json::from_str(schema)?;
+        let credential_subject = &self.credential_subject;
+
+        if !jsonschema::is_valid(&schema, &credential_subject) {
+            return Err("Credential subject does not match schema".into());
+        }
+
+        // Proceed with signing if validation is successful
+        let private_key = Ed25519KeyPair::from_pkcs8(private_key).map_err(|e| e.to_string())?;
+        let proof_value = private_key.sign(self.id.as_ref().unwrap().as_bytes());
+
+        let proof: Proof = Proof {
+            id: None,
+            proof_type: "Ed25519Signature2018".to_string(),
+            proof_purpose: "assertionMethod".to_string(),
+            verification_method: None,
+            cryptosuite: None,
+            created: None,
+            expires: None,
+            domain: None,
+            challenge: None,
+            proof_value: BASE64_STANDARD.encode(proof_value.as_ref()),
+            previous_proof: None,
+            nonce: None,
+        };
+
+        Ok(VerifiableCredential {
+            unsigned: self,
+            proof,
+        })
+    }
 }
 
 #[cfg(test)]
@@ -248,5 +286,41 @@ mod tests {
         let signed_vc_2 = vc_2.sign(&private_key).expect("Failed to sign VC");
 
         assert_eq!(signed_vc, signed_vc_2);
+    }
+
+    #[test]
+    fn sign_with_schema_check() {
+        let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
+            "../test_data/verifiable_credentials/unsigned_one_or_many.json"
+        ))
+        .expect("Failed to deserialize JSON");
+
+        let private_key = std::fs::read("test_data/keys/private_key.pkcs8")
+            .expect("Error reading private key from file");
+
+        let schema = include_str!("../test_data/schemas/schema.json");
+
+        let signed_vc = vc
+            .sign_with_schema_check(&private_key, schema)
+            .expect("Failed to sign VC");
+
+        assert!(serde_json::to_string(&signed_vc).is_ok());
+    }
+
+    #[test]
+    fn sign_with_schema_check_fail() {
+        let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
+            "../test_data/verifiable_credentials/unsigned_one_or_many.json"
+        ))
+        .expect("Failed to deserialize JSON");
+
+        let private_key = std::fs::read("test_data/keys/private_key.pkcs8")
+            .expect("Error reading private key from file");
+
+        let schema = include_str!("../test_data/schemas/schema_fail.json");
+
+        let signed_vc = vc.sign_with_schema_check(&private_key, schema);
+
+        assert!(signed_vc.is_err());
     }
 }
