@@ -172,8 +172,6 @@ impl UnsignedVerifiableCredential {
 
 #[cfg(test)]
 mod tests {
-    use ring::signature::KeyPair;
-
     use super::*;
 
     /// Test that a valid Verifiable Credential can be deserialized
