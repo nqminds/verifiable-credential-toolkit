@@ -1,3 +1,3 @@
 # Verifiable Credential Toolkit
 
-Tools for Verifiable Credential creation and signing.
+Tools and Library for Verifiable Credential creation and signing. 
