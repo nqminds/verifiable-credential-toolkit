@@ -50,7 +50,7 @@ mod tests {
         let private_key = std::fs::read("tests/test_data/keys/private_key.pkcs8")
             .expect("Error reading private key from file");
 
-        let signed_vc = vc.sign(&private_key).unwrap();
+        let signed_vc = vc.sign(private_key).unwrap();
 
         assert!(serde_json::to_string(&signed_vc).is_ok());
     }
@@ -73,7 +73,7 @@ mod tests {
 
         let signed_vc = vc.sign(&private_key).expect("Failed to sign VC");
 
-        let signed_vc_2 = vc_2.sign(&private_key).expect("Failed to sign VC");
+        let signed_vc_2 = vc_2.sign(private_key).expect("Failed to sign VC");
 
         assert_eq!(signed_vc, signed_vc_2);
     }
@@ -109,7 +109,7 @@ mod tests {
 
         let schema = include_str!("test_data/schemas/schema_fail.json");
 
-        let signed_vc = vc.sign_with_schema_check(&private_key, schema);
+        let signed_vc = vc.sign_with_schema_check(private_key, schema);
 
         assert!(signed_vc.is_err());
     }
@@ -132,7 +132,7 @@ mod tests {
         // Set id of unsigned_vc
         unsigned_vc.id = Some("http://example.com/credentials/3732".to_string());
 
-        let new_signed_vc = unsigned_vc.sign(&private_key).expect("Failed to sign VC");
+        let new_signed_vc = unsigned_vc.sign(private_key).expect("Failed to sign VC");
 
         println!("{}", serde_json::to_string_pretty(&vc).unwrap());
         println!("{}", serde_json::to_string_pretty(&new_signed_vc).unwrap());
@@ -152,7 +152,7 @@ mod tests {
             .expect("Error reading private key from file");
 
         let signed_vc = vc
-            .sign_with_schema_check_from_url(&private_key, "https://json.schemastore.org/any.json")
+            .sign_with_schema_check_from_url(private_key, "https://json.schemastore.org/any.json")
             .expect("Failed to sign VC");
 
         assert!(serde_json::to_string(&signed_vc).is_ok());
@@ -169,7 +169,7 @@ mod tests {
             .expect("Error reading private key from file");
 
         let signed_vc = vc.sign_with_schema_check_from_url(
-            &private_key,
+            private_key,
             "http://localhost:8000/DoesNotExist.json",
         );
 

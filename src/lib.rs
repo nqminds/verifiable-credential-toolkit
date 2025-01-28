@@ -142,9 +142,10 @@ struct Proof {
 impl UnsignedVerifiableCredential {
     pub fn sign(
         self,
-        private_key: &[u8],
+        private_key: impl AsRef<[u8]>,
     ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
-        let private_key = Ed25519KeyPair::from_pkcs8(private_key).map_err(|e| e.to_string())?;
+        let private_key =
+            Ed25519KeyPair::from_pkcs8(private_key.as_ref()).map_err(|e| e.to_string())?;
         let proof_value = private_key.sign(self.id.as_ref().unwrap().as_bytes());
 
         let proof: Proof = Proof {
@@ -170,7 +171,7 @@ impl UnsignedVerifiableCredential {
 
     pub fn sign_with_schema_check(
         self,
-        private_key: &[u8],
+        private_key: impl AsRef<[u8]>,
         schema: &str,
     ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
         // Validate the credentialSubject against the provided schema
@@ -182,7 +183,8 @@ impl UnsignedVerifiableCredential {
         }
 
         // Proceed with signing if validation is successful
-        let private_key = Ed25519KeyPair::from_pkcs8(private_key).map_err(|e| e.to_string())?;
+        let private_key =
+            Ed25519KeyPair::from_pkcs8(private_key.as_ref()).map_err(|e| e.to_string())?;
         let proof_value = private_key.sign(self.id.as_ref().unwrap().as_bytes());
 
         let proof: Proof = Proof {
@@ -208,7 +210,7 @@ impl UnsignedVerifiableCredential {
 
     pub fn sign_with_schema_check_from_url(
         self,
-        private_key: &[u8],
+        private_key: impl AsRef<[u8]>,
         schema_url: &str,
     ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
         // Attempt to get the schema from the URL using reqwest
@@ -222,7 +224,8 @@ impl UnsignedVerifiableCredential {
         }
 
         // Proceed with signing if validation is successful
-        let private_key = Ed25519KeyPair::from_pkcs8(private_key).map_err(|e| e.to_string())?;
+        let private_key =
+            Ed25519KeyPair::from_pkcs8(private_key.as_ref()).map_err(|e| e.to_string())?;
         let proof_value = private_key.sign(self.id.as_ref().unwrap().as_bytes());
 
         let proof: Proof = Proof {
