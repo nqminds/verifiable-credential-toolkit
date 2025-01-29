@@ -54,7 +54,7 @@ pub struct UnsignedVerifiableCredential {
 pub struct VerifiableCredential {
     #[serde(flatten)]
     unsigned: UnsignedVerifiableCredential,
-    proof: Proof,
+    pub proof: Proof,
 }
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -110,7 +110,7 @@ pub struct CredentialSchema {
 /// <https://www.w3.org/TR/vc-data-integrity/#proofs>
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
-struct Proof {
+pub struct Proof {
     #[serde(skip_serializing_if = "Option::is_none")]
     id: Option<String>,
     #[serde(rename = "type")]
@@ -137,6 +137,74 @@ struct Proof {
     #[serde_as(as = "Option<OneOrMany<_, PreferOne>>")]
     #[serde(skip_serializing_if = "Option::is_none")]
     nonce: Option<Vec<String>>,
+}
+
+impl Proof {
+    /// Set the ID of the proof <https://www.w3.org/TR/vc-data-integrity/#proofs>
+    pub fn set_id(mut self, id: String) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    /// Set the type of the proof <https://www.w3.org/TR/vc-data-integrity/#proofs>
+    pub fn set_proof_type(mut self, proof_type: String) -> Self {
+        self.proof_type = proof_type;
+        self
+    }
+
+    /// Set the proofPurpose of the proof <https://www.w3.org/TR/vc-data-integrity/#proofs>
+    pub fn set_proof_purpose(mut self, proof_purpose: String) -> Self {
+        self.proof_purpose = proof_purpose;
+        self
+    }
+
+    /// Set the verificationMethod of the proof <https://www.w3.org/TR/vc-data-integrity/#proofs>
+    pub fn set_verification_method(mut self, verification_method: String) -> Self {
+        self.verification_method = Some(verification_method);
+        self
+    }
+
+    /// Set the cryptosuite of the proof <https://www.w3.org/TR/vc-data-integrity/#proofs>
+    pub fn set_crypto_suite(mut self, cryptosuite: String) -> Self {
+        self.cryptosuite = Some(cryptosuite);
+        self
+    }
+
+    /// Set the created timestamp of the proof <https://www.w3.org/TR/vc-data-integrity/#proofs>
+    pub fn set_created(mut self, created: DateTime<Utc>) -> Self {
+        self.created = Some(created);
+        self
+    }
+
+    /// Set the expires timestamp of the proof <https://www.w3.org/TR/vc-data-integrity/#proofs>
+    pub fn set_expires(mut self, expires: DateTime<Utc>) -> Self {
+        self.expires = Some(expires);
+        self
+    }
+
+    /// Set the domain of the proof <https://www.w3.org/TR/vc-data-integrity/#proofs>
+    pub fn set_domain(mut self, domain: Vec<String>) -> Self {
+        self.domain = Some(domain);
+        self
+    }
+
+    /// Set the challenge of the proof <https://www.w3.org/TR/vc-data-integrity/#proofs>
+    pub fn set_challenge(mut self, challenge: String) -> Self {
+        self.challenge = Some(challenge);
+        self
+    }
+
+    /// Set the previousProof of the proof <https://www.w3.org/TR/vc-data-integrity/#proofs>
+    pub fn set_previous_proof(mut self, previous_proof: String) -> Self {
+        self.previous_proof = Some(previous_proof);
+        self
+    }
+
+    /// Set the nonce of the proof <https://www.w3.org/TR/vc-data-integrity/#proofs>
+    pub fn set_nonce(mut self, nonce: Vec<String>) -> Self {
+        self.nonce = Some(nonce);
+        self
+    }
 }
 
 impl UnsignedVerifiableCredential {

@@ -1,5 +1,6 @@
 #[cfg(test)]
 mod tests {
+    use chrono::{DateTime, Duration, Utc};
     use verifiable_credential_toolkit::{UnsignedVerifiableCredential, VerifiableCredential};
 
     /// Test that a valid Verifiable Credential can be deserialized
@@ -174,5 +175,36 @@ mod tests {
         );
 
         assert!(signed_vc.is_err());
+    }
+
+    #[test]
+    fn customise_proof() {
+        let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
+            "test_data/verifiable_credentials/unsigned_one_or_many.json"
+        ))
+        .expect("Failed to deserialize JSON");
+
+        let private_key = std::fs::read("tests/test_data/keys/private_key.pkcs8")
+            .expect("Error reading private key from file");
+
+        let mut signed_vc = vc.sign(private_key).unwrap();
+
+        let expires_time: DateTime<Utc> = Utc::now() + Duration::days(1);
+
+        // Customising proof values using builder pattern
+        signed_vc.proof = signed_vc
+            .proof
+            .set_id("http://example.com/credentials/3732".to_string())
+            .set_proof_type("Ed25519Signature2020".to_string())
+            .set_proof_purpose("test".to_string())
+            .set_expires(expires_time);
+
+        assert!(serde_json::to_string(&signed_vc).is_ok());
+
+        let json_vc = serde_json::to_string(&signed_vc).unwrap();
+        // Assert that id: "http://example.com/credentials/3732" is present in the proof
+        assert!(json_vc.contains(r#""id":"http://example.com/credentials/3732""#));
+        // Assert that type: "Ed25519Signature2020" is present in the proof
+        assert!(json_vc.contains(r#""type":"Ed25519Signature2020""#));
     }
 }
