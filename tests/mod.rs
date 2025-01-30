@@ -1,7 +1,10 @@
 #[cfg(test)]
 mod tests {
     use chrono::{DateTime, Duration, Utc};
-    use verifiable_credential_toolkit::{UnsignedVerifiableCredential, VerifiableCredential};
+    use url::Url;
+    use verifiable_credential_toolkit::{
+        UnsignedVerifiableCredential, VerifiableCredential, VerifiablePresentation,
+    };
 
     /// Test that a valid Verifiable Credential can be deserialized
     #[test]
@@ -131,7 +134,8 @@ mod tests {
         let mut unsigned_vc = clone_vc.to_unsigned();
 
         // Set id of unsigned_vc
-        unsigned_vc.id = Some("http://example.com/credentials/3732".to_string());
+        unsigned_vc.id =
+            Some(Url::parse("http://example.com/credentials/3732").expect("Invalid URL"));
 
         let new_signed_vc = unsigned_vc.sign(private_key).expect("Failed to sign VC");
 
@@ -178,7 +182,7 @@ mod tests {
     }
 
     #[test]
-    fn customise_proof() {
+    fn customise_proof_using_builder() {
         let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
             "test_data/verifiable_credentials/unsigned_one_or_many.json"
         ))
@@ -194,7 +198,7 @@ mod tests {
         // Customising proof values using builder pattern
         signed_vc.proof = signed_vc
             .proof
-            .set_id("http://example.com/credentials/3732".to_string())
+            .set_id(Url::parse("http://example.com/credentials/3732").expect("Invalid URL"))
             .set_proof_type("Ed25519Signature2020".to_string())
             .set_proof_purpose("test".to_string())
             .set_expires(expires_time);
@@ -206,5 +210,54 @@ mod tests {
         assert!(json_vc.contains(r#""id":"http://example.com/credentials/3732""#));
         // Assert that type: "Ed25519Signature2020" is present in the proof
         assert!(json_vc.contains(r#""type":"Ed25519Signature2020""#));
+    }
+
+    #[test]
+    fn customise_proof_manually() {
+        let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
+            "test_data/verifiable_credentials/unsigned_one_or_many.json"
+        ))
+        .expect("Failed to deserialize JSON");
+
+        let private_key = std::fs::read("tests/test_data/keys/private_key.pkcs8")
+            .expect("Error reading private key from file");
+
+        let mut signed_vc = vc.sign(private_key).unwrap();
+
+        let expires_time: DateTime<Utc> = Utc::now() + Duration::days(1);
+
+        // Set proof values manually
+        signed_vc.proof.expires = Some(expires_time);
+        signed_vc.proof.id =
+            Some(Url::parse("http://example.com/credentials/3732").expect("Invalid URL"));
+        signed_vc.proof.proof_type = "Ed25519Signature2020".to_string();
+        signed_vc.proof.proof_purpose = "test".to_string();
+
+        assert!(serde_json::to_string(&signed_vc).is_ok());
+
+        let json_vc = serde_json::to_string(&signed_vc).unwrap();
+        // Assert that id: "http://example.com/credentials/3732" is present in the proof
+        assert!(json_vc.contains(r#""id":"http://example.com/credentials/3732""#));
+        // Assert that type: "Ed25519Signature2020" is present in the proof
+        assert!(json_vc.contains(r#""type":"Ed25519Signature2020""#));
+    }
+
+    #[test]
+    fn build_verifiable_presentation() {
+        let vc: VerifiableCredential =
+            serde_json::from_str(include_str!("test_data/verifiable_credentials/vc.json"))
+                .expect("Failed to deserialize JSON");
+
+        let vp: VerifiablePresentation = VerifiablePresentation {
+            presentation_type: vec!["VerifiablePresentation".to_string()],
+            verifiable_credential: Some(vec![vc]),
+            id: Some(
+                Url::parse("urn:uuid:3978344f-8596-4c3a-a978-8fcaba3903c5").expect("Invalid URL"),
+            ),
+            holder: None,
+            context: vec![Url::parse("https://www.w3.org/ns/credentials/v2").expect("Invalid URL")],
+        };
+
+        assert!(serde_json::to_string(&vp).is_ok());
     }
 }

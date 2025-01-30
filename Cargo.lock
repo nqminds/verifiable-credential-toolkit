@@ -1636,6 +1636,7 @@ dependencies = [
  "form_urlencoded",
  "idna",
  "percent-encoding",
+ "serde",
 ]
 
 [[package]]
@@ -1685,6 +1686,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
+ "url",
 ]
 
 [[package]]
