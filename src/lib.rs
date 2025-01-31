@@ -255,7 +255,11 @@ impl UnsignedVerifiableCredential {
     ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
         let private_key =
             Ed25519KeyPair::from_pkcs8(private_key.as_ref()).map_err(|e| e.to_string())?;
-        let proof_value = private_key.sign(self.id.as_ref().unwrap().as_str().as_bytes());
+        let proof_value = private_key.sign(
+            to_string(&self)
+                .expect("Failed to serialize unsigned verifiable credential")
+                .as_bytes(),
+        );
 
         let proof: Proof = Proof {
             id: None,
@@ -365,13 +369,13 @@ impl VerifiableCredential {
     }
 
     pub fn verify(&self, public_key: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-        let clone = self.clone();
         let public_key = UnparsedPublicKey::new(&ED25519, public_key);
 
         let proof_value = BASE64_STANDARD
             .decode(&self.proof.proof_value)
             .map_err(|e| format!("Failed to decode proof value: {}", e))?;
 
+        let clone = self.clone().to_unsigned();
         public_key
             .verify(
                 to_string(&clone)
