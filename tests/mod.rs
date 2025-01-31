@@ -284,4 +284,31 @@ mod tests {
         }
         assert!(verify_result.is_ok());
     }
+
+    #[test]
+    fn verify_denies_modified_verifiable_credential() {
+        let private_key = std::fs::read("tests/test_data/keys/key.priv")
+            .expect("Error reading private key from file");
+
+        let vc: VerifiableCredential = serde_json::from_str::<UnsignedVerifiableCredential>(
+            include_str!("test_data/verifiable_credentials/unsigned.json"),
+        )
+        .expect("Failed to deserialize JSON")
+        .sign(&private_key)
+        .expect("Failed to sign VC");
+
+        let mut vc_serialized = serde_json::to_string(&vc).expect("Failed to serialize VC");
+
+        vc_serialized = vc_serialized.replace("HenryTrustPhone", "AshEvilPhone");
+
+        let edited_vc: VerifiableCredential =
+            serde_json::from_str(&vc_serialized).expect("Failed to deserialize JSON");
+
+        let public_key = std::fs::read("tests/test_data/keys/key.pub")
+            .expect("Error reading public key from file");
+
+        let verify_result = edited_vc.verify(&public_key);
+
+        assert!(verify_result.is_err());
+    }
 }
