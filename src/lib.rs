@@ -1,8 +1,8 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
 use chrono::{DateTime, Utc};
-use ring::signature::Ed25519KeyPair;
+use ring::signature::{Ed25519KeyPair, UnparsedPublicKey, ED25519};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{to_string, Value};
 use serde_with::formats::PreferOne;
 use serde_with::{serde_as, OneOrMany};
 use std::collections::HashMap;
@@ -255,7 +255,11 @@ impl UnsignedVerifiableCredential {
     ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
         let private_key =
             Ed25519KeyPair::from_pkcs8(private_key.as_ref()).map_err(|e| e.to_string())?;
-        let proof_value = private_key.sign(self.id.as_ref().unwrap().as_str().as_bytes());
+        let proof_value = private_key.sign(
+            to_string(&self)
+                .expect("Failed to serialize unsigned verifiable credential")
+                .as_bytes(),
+        );
 
         let proof: Proof = Proof {
             id: None,
@@ -362,5 +366,24 @@ impl UnsignedVerifiableCredential {
 impl VerifiableCredential {
     pub fn to_unsigned(self) -> UnsignedVerifiableCredential {
         self.unsigned
+    }
+
+    pub fn verify(&self, public_key: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+        let public_key = UnparsedPublicKey::new(&ED25519, public_key);
+
+        let proof_value = BASE64_STANDARD
+            .decode(&self.proof.proof_value)
+            .map_err(|e| format!("Failed to decode proof value: {}", e))?;
+
+        let clone = self.clone().to_unsigned();
+        public_key
+            .verify(
+                to_string(&clone)
+                    .map_err(|e| format!("Failed to serialize credential: {}", e))?
+                    .as_bytes(),
+                &proof_value,
+            )
+            .map_err(|e| format!("Verification failed: {}", e))?;
+        Ok(())
     }
 }
