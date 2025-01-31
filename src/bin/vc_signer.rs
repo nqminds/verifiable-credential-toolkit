@@ -31,11 +31,11 @@ enum Commands {
         output_vc: PathBuf,
 
         /// Optional schema file path for validation
-        #[arg(short, long)]
+        #[arg(short, long, conflicts_with = "schema_url")]
         schema: Option<PathBuf>,
 
         /// Optional schema URL for validation
-        #[arg(short = 'u', long)]
+        #[arg(short = 'u', long, conflicts_with = "schema")]
         schema_url: Option<String>,
     },
 }
