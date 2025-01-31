@@ -5,7 +5,10 @@ use verifiable_credential_toolkit::UnsignedVerifiableCredential;
 
 #[derive(Parser)]
 #[command(name = "vc-signer")]
-#[command(about = "A CLI tool for signing Verifiable Credentials")]
+#[command(
+    version = "1.0",
+    about = "A CLI tool for signing Verifiable Credentials"
+)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
