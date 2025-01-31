@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::path::PathBuf;
-use verifiable_credential_toolkit::UnsignedVerifiableCredential;
+use verifiable_credential_toolkit::{UnsignedVerifiableCredential, VerifiableCredential};
 
 #[derive(Parser)]
 #[command(name = "vc-signer")]
@@ -48,9 +48,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             schema,
             schema_url,
         } => {
-            // Read the unsigned VC
+            // Read the unsigned VC file
             let unsigned_vc_str = fs::read_to_string(input_vc)?;
-            let unsigned_vc: UnsignedVerifiableCredential = serde_json::from_str(&unsigned_vc_str)?;
+
+            // Try to deserialize to UnsignedVerifiableCredential first
+            let unsigned_vc: Result<UnsignedVerifiableCredential, _> =
+                serde_json::from_str(&unsigned_vc_str);
+            let unsigned_vc = match unsigned_vc {
+                Ok(vc) => vc,
+                Err(_) => {
+                    // If deserialization fails, try to deserialize to VerifiableCredential and convert
+                    let verifiable_vc: VerifiableCredential =
+                        serde_json::from_str(&unsigned_vc_str)?;
+                    verifiable_vc.to_unsigned()
+                }
+            };
 
             // Read the private key
             let private_key = fs::read(key)?;
