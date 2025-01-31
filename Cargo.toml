@@ -1,9 +1,14 @@
 [package]
 name = "verifiable-credential-toolkit"
 version = "0.1.2"
+description = "Provides methods for handling, constructing and signing Verifiable Credentials"
 authors = ["Henry Pearson <henry@nquiringminds.com>"]
 edition = "2021"
+repository = "https://github.com/nqminds/verifiable-credential-toolkit"
+readme = "README.md"
 default-run = "vc_signer"
+license = "Apache-2.0"
+
 
 [dependencies]
 serde = { version = "1.0.217", features = ["derive"] }
