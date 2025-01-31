@@ -249,6 +249,7 @@ impl Proof {
 }
 
 impl UnsignedVerifiableCredential {
+    /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue.
     pub fn sign(
         self,
         private_key: impl AsRef<[u8]>,
@@ -282,6 +283,7 @@ impl UnsignedVerifiableCredential {
         })
     }
 
+    /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue. Also performs a JSON schema check on the credentialSubject.
     pub fn sign_with_schema_check(
         self,
         private_key: impl AsRef<[u8]>,
@@ -321,6 +323,7 @@ impl UnsignedVerifiableCredential {
         })
     }
 
+    /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue. Also performs a JSON schema check on the credentialSubject. The schema is fetched from a URL.
     pub fn sign_with_schema_check_from_url(
         self,
         private_key: impl AsRef<[u8]>,
@@ -364,10 +367,12 @@ impl UnsignedVerifiableCredential {
 }
 
 impl VerifiableCredential {
+    /// Removes the proof and returns the [UnsignedVerifiableCredential]
     pub fn to_unsigned(self) -> UnsignedVerifiableCredential {
         self.unsigned
     }
 
+    /// Verifies the contents of a Verifiable Credential against a public key
     pub fn verify(&self, public_key: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
         let public_key = UnparsedPublicKey::new(&ED25519, public_key);
 
