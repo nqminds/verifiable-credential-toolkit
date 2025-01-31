@@ -2,10 +2,10 @@
   "@context": ["https://www.w3.org/ns/credentials/v2"],
   "id": "urn:uuid:9a3e3c0e-2db0-412a-95c7-cf5520ba78df",
   "type": ["VerifiableCredential", "ExampleVerifiableCredential"],
-  "issuer": "https://nqminds.example.com/issuer/1",
+  "issuer": "https://www.example.com/",
   "validFrom": "2024-08-22T13:53:32.295644150Z",
   "credentialSchema": {
-    "id": "https://github.com/nqminds/ClaimCascade/tree/main/example_vcs_for_cahn/schemas/device.json",
+    "id": "https://www.example.com/foo.json",
     "type": "JsonSchema"
   },
   "credentialSubject": {
