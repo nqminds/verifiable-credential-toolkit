@@ -47,7 +47,7 @@ mod tests {
     #[test]
     fn sign_vc() {
         let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
-            "test_data/verifiable_credentials/unsigned_one_or_many.json"
+            "test_data/verifiable_credentials/unsigned.json"
         ))
         .expect("Failed to deserialize JSON");
 
@@ -63,7 +63,7 @@ mod tests {
     #[test]
     fn canonicalisation_sign() {
         let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
-            "test_data/verifiable_credentials/unsigned_one_or_many.json"
+            "test_data/verifiable_credentials/unsigned.json"
         ))
         .expect("Failed to deserialize JSON");
 
@@ -79,13 +79,16 @@ mod tests {
 
         let signed_vc_2 = vc_2.sign(private_key).expect("Failed to sign VC");
 
+        
+
+
         assert_eq!(signed_vc, signed_vc_2);
     }
 
     #[test]
     fn sign_with_schema_check() {
         let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
-            "test_data/verifiable_credentials/unsigned_one_or_many.json"
+            "test_data/verifiable_credentials/unsigned.json"
         ))
         .expect("Failed to deserialize JSON");
 
@@ -104,7 +107,7 @@ mod tests {
     #[test]
     fn sign_with_schema_check_fail() {
         let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
-            "test_data/verifiable_credentials/unsigned_one_or_many.json"
+            "test_data/verifiable_credentials/unsigned.json"
         ))
         .expect("Failed to deserialize JSON");
 
@@ -124,7 +127,7 @@ mod tests {
             .expect("Error reading private key from file");
 
         let vc: VerifiableCredential = serde_json::from_str::<UnsignedVerifiableCredential>(
-            include_str!("test_data/verifiable_credentials/unsigned_one_or_many.json"),
+            include_str!("test_data/verifiable_credentials/unsigned.json"),
         )
         .expect("Failed to deserialize JSON")
         .sign(&private_key)
@@ -149,7 +152,7 @@ mod tests {
 
     fn sign_with_schema_check_url() {
         let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
-            "test_data/verifiable_credentials/unsigned_one_or_many.json"
+            "test_data/verifiable_credentials/unsigned.json"
         ))
         .expect("Failed to deserialize JSON");
 
@@ -166,7 +169,7 @@ mod tests {
     #[test]
     fn sign_with_schema_check_url_fails() {
         let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
-            "test_data/verifiable_credentials/unsigned_one_or_many.json"
+            "test_data/verifiable_credentials/unsigned.json"
         ))
         .expect("Failed to deserialize JSON");
 
@@ -184,7 +187,7 @@ mod tests {
     #[test]
     fn customise_proof_using_builder() {
         let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
-            "test_data/verifiable_credentials/unsigned_one_or_many.json"
+            "test_data/verifiable_credentials/unsigned.json"
         ))
         .expect("Failed to deserialize JSON");
 
@@ -215,7 +218,7 @@ mod tests {
     #[test]
     fn customise_proof_manually() {
         let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
-            "test_data/verifiable_credentials/unsigned_one_or_many.json"
+            "test_data/verifiable_credentials/unsigned.json"
         ))
         .expect("Failed to deserialize JSON");
 
@@ -267,7 +270,7 @@ mod tests {
             .expect("Error reading private key from file");
 
         let vc: VerifiableCredential = serde_json::from_str::<UnsignedVerifiableCredential>(
-            include_str!("test_data/verifiable_credentials/unsigned_one_or_many.json"),
+            include_str!("test_data/verifiable_credentials/unsigned.json"),
         )
         .expect("Failed to deserialize JSON")
         .sign(&private_key)
