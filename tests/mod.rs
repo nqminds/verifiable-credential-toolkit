@@ -79,9 +79,6 @@ mod tests {
 
         let signed_vc_2 = vc_2.sign(private_key).expect("Failed to sign VC");
 
-        
-
-
         assert_eq!(signed_vc, signed_vc_2);
     }
 
