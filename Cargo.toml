@@ -8,7 +8,7 @@ repository = "https://github.com/nqminds/verifiable-credential-toolkit"
 readme = "README.md"
 default-run = "vc_signer"
 license = "Apache-2.0"
-documentation = "https://docs.rs/crate/verifiable-credential-toolkit"
+documentation = "https://docs.rs/verifiable-credential-toolkit/latest/verifiable_credential_toolkit/"
 
 
 [dependencies]
