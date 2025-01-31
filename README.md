@@ -4,20 +4,7 @@ Tools and Library for Verifiable Credential creation and signing.
 
 # CLI Tools
 
-## `generate_keys`
-
-```
-Generates Ed25519 key pairs
-
-Usage: generate_keys [OPTIONS]
-
-Options:
-  -o, --output <OUTPUT>  Output directory for the keys [default: .]
-  -h, --help             Print help
-  -V, --version          Print version
-```
-
-## `vc_signer`
+## `vc_signer` (cargo default-run)
 
 ```
 A CLI tool for signing Verifiable Credentials
@@ -45,4 +32,17 @@ Options:
   -s, --schema <SCHEMA>          Optional schema file path for validation
   -u, --schema-url <SCHEMA_URL>  Optional schema URL for validation
   -h, --help                     Print help
+```
+
+## `generate_keys`
+
+```
+Generates Ed25519 key pairs
+
+Usage: generate_keys [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output directory for the keys [default: .]
+  -h, --help             Print help
+  -V, --version          Print version
 ```
