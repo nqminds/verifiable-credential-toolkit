@@ -55,6 +55,13 @@ You can compile the sign and verify functions for WASM like so:
 wasm-pack build --target web
 ```
 
+Tested with:
+
+```
+wasm-pack --version
+wasm-pack 0.13.1
+```
+
 By default it will build in the `pkg` directory.
 
 I have put an example usage of the WASM functionality in the browser inside the [./wasm_js_example_usage directory](./wasm_js_example_usage). 
