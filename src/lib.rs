@@ -8,6 +8,9 @@ use serde_with::{serde_as, OneOrMany};
 use std::collections::HashMap;
 use url::Url;
 
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
+
 /// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - <https://www.w3.org/TR/vc-data-model-2.0> WITHOUT the proof
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -321,7 +324,10 @@ impl UnsignedVerifiableCredential {
             proof,
         })
     }
+}
 
+#[cfg(not(target_arch = "wasm32"))]
+impl UnsignedVerifiableCredential {
     /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue. Also performs a JSON schema check on the credentialSubject. The schema is fetched from a URL.
     pub fn sign_with_schema_check_from_url(
         self,

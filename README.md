@@ -46,3 +46,33 @@ Options:
   -h, --help             Print help
   -V, --version          Print version
 ```
+
+# WASM Compilation and Usage
+
+You can compile the sign and verify functions for WASM like so:
+
+```
+wasm-pack build --target web
+```
+
+By default it will build in the `pkg` directory.
+
+I have put an example usage of the WASM functionality in the browser inside the [./wasm_js_example_usage directory](./wasm_js_example_usage). 
+
+If you compile it inside that directory in a directory called pkg like so:
+
+```
+wasm-pack build --target web --out-dir wasm_js_example_usage/pkg
+```
+
+Then run the web server at localhost 8080 with:
+
+```
+python3 -m http.server 8080
+```
+
+When you load the page in a browser and open the console you should see the signed VC object being logged and the successful result of the verification. See screenshot below:
+
+![Screenshot showing example web page and console logs](./wasm_js_example_usage/screenshot.png)
+
+The load_keys.mjs Node.js script can be used to print a private and public key to the command line in a format which can be copied into the index.js file for testing/example usage purposes.
