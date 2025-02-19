@@ -1,12 +1,13 @@
-use wasm_bindgen::prelude::*;
-use serde_wasm_bindgen::{from_value, to_value};
 use crate::UnsignedVerifiableCredential;
 use crate::VerifiableCredential;
+use serde_wasm_bindgen::{from_value, to_value};
+use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
 pub fn sign(unsigned_vc: JsValue, private_key: &[u8]) -> Result<JsValue, JsError> {
     let unsigned: UnsignedVerifiableCredential = from_value(unsigned_vc)?;
-    let signed = unsigned.sign(private_key)
+    let signed = unsigned
+        .sign(private_key)
         .map_err(|e| JsError::new(&format!("Signing failed: {}", e)))?;
     Ok(to_value(&signed)?)
 }

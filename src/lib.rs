@@ -1,6 +1,6 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
 use chrono::{DateTime, Utc};
-use ed25519_dalek::{Signer, Verifier, Signature, SigningKey, VerifyingKey};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::formats::PreferOne;
@@ -254,8 +254,8 @@ impl Proof {
 impl UnsignedVerifiableCredential {
     /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue.
     pub fn sign(
-    self,
-    private_key: &[u8],
+        self,
+        private_key: &[u8],
     ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
         let private_key_array: [u8; 32] = private_key
             .try_into()
@@ -263,7 +263,7 @@ impl UnsignedVerifiableCredential {
         let signing_key = SigningKey::from_bytes(&private_key_array);
         let message = serde_json::to_string(&self)?.as_bytes().to_vec();
         let signature = signing_key.sign(&message);
-        
+
         let proof = Proof {
             id: None,
             proof_type: "Ed25519Signature2018".to_string(),
@@ -279,7 +279,10 @@ impl UnsignedVerifiableCredential {
             nonce: None,
         };
 
-        Ok(VerifiableCredential { unsigned: self, proof })
+        Ok(VerifiableCredential {
+            unsigned: self,
+            proof,
+        })
     }
 
     /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue. Also performs a JSON schema check on the credentialSubject.
@@ -298,7 +301,8 @@ impl UnsignedVerifiableCredential {
 
         // Proceed with signing if validation is successful
         let bytes = private_key.as_ref();
-        let private_key_array: [u8; 32] = bytes.try_into()
+        let private_key_array: [u8; 32] = bytes
+            .try_into()
             .map_err(|_| "Private key must be exactly 32 bytes")?;
         let signing_key = SigningKey::from_bytes(&private_key_array);
         let proof_value = signing_key.sign(self.id.as_ref().unwrap().as_str().as_bytes());
@@ -346,7 +350,8 @@ impl UnsignedVerifiableCredential {
 
         // Proceed with signing if validation is successful
         let bytes = private_key.as_ref();
-        let private_key_array: [u8; 32] = bytes.try_into()
+        let private_key_array: [u8; 32] = bytes
+            .try_into()
             .map_err(|_| "Private key must be exactly 32 bytes")?;
         let signing_key = SigningKey::from_bytes(&private_key_array);
         let proof_value = signing_key.sign(self.id.as_ref().unwrap().as_str().as_bytes());
@@ -385,10 +390,11 @@ impl VerifiableCredential {
         let message = serde_json::to_string(&self.unsigned)?;
         let proof_bytes = BASE64_STANDARD.decode(&self.proof.proof_value)?;
         let signature = Signature::from_slice(&proof_bytes)?;
-        let public_key_array: [u8; 32] = public_key.try_into()
+        let public_key_array: [u8; 32] = public_key
+            .try_into()
             .map_err(|_| "Private key must be exactly 32 bytes")?;
         let public_key = VerifyingKey::from_bytes(&public_key_array)?;
-        
+
         public_key.verify(message.as_bytes(), &signature)?;
         Ok(())
     }
