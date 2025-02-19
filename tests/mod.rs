@@ -75,7 +75,7 @@ mod tests {
         let private_key: &[u8] = &std::fs::read("tests/test_data/keys/key.priv")
             .expect("Error reading private key from file");
 
-        let signed_vc = vc.sign(&private_key).expect("Failed to sign VC");
+        let signed_vc = vc.sign(private_key).expect("Failed to sign VC");
 
         let signed_vc_2 = vc_2.sign(private_key).expect("Failed to sign VC");
 
@@ -95,7 +95,7 @@ mod tests {
         let schema = include_str!("test_data/schemas/schema.json");
 
         let signed_vc = vc
-            .sign_with_schema_check(&private_key, schema)
+            .sign_with_schema_check(private_key, schema)
             .expect("Failed to sign VC");
 
         assert!(serde_json::to_string(&signed_vc).is_ok());
@@ -127,7 +127,7 @@ mod tests {
             include_str!("test_data/verifiable_credentials/unsigned.json"),
         )
         .expect("Failed to deserialize JSON")
-        .sign(&private_key)
+        .sign(private_key)
         .expect("Failed to sign VC");
 
         let clone_vc = vc.clone();
@@ -270,7 +270,7 @@ mod tests {
             include_str!("test_data/verifiable_credentials/unsigned.json"),
         )
         .expect("Failed to deserialize JSON")
-        .sign(&private_key)
+        .sign(private_key)
         .expect("Failed to sign VC");
 
         let public_key = std::fs::read("tests/test_data/keys/key.pub")
@@ -294,7 +294,7 @@ mod tests {
             include_str!("test_data/verifiable_credentials/unsigned.json"),
         )
         .expect("Failed to deserialize JSON")
-        .sign(&private_key)
+        .sign(private_key)
         .expect("Failed to sign VC");
 
         let mut vc_serialized = serde_json::to_string(&vc).expect("Failed to serialize VC");
