@@ -45,7 +45,7 @@ enum Commands {
         /// Path to the private key file
         #[arg(short, long)]
         key: PathBuf,
-    }
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -100,15 +100,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let signed_vc_str = fs::read_to_string(input_vc)?;
 
             // Try to deserialize to UnsignedVerifiableCredential first
-            let signed_vc: Result<VerifiableCredential, _> =
-                serde_json::from_str(&signed_vc_str);
+            let signed_vc: Result<VerifiableCredential, _> = serde_json::from_str(&signed_vc_str);
 
             let signed_vc = match signed_vc {
                 Ok(vc) => vc,
                 Err(_) => {
                     // If deserialization fails, try to deserialize to VerifiableCredential and convert
-                    let verifiable_vc: VerifiableCredential =
-                        serde_json::from_str(&signed_vc_str)?;
+                    let verifiable_vc: VerifiableCredential = serde_json::from_str(&signed_vc_str)?;
                     verifiable_vc
                 }
             };
@@ -124,9 +122,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Successfully verified the verifiable credential!");
                     Ok(())
                 }
-                Err(err) => {
-                    Err(err)
-                }
+                Err(err) => Err(err),
             }
         }
     }
