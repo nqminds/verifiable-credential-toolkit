@@ -32,6 +32,7 @@ enum Commands {
         schema: Option<PathBuf>,
 
         /// Optional schema URL for validation
+        #[cfg(not(target_arch = "wasm32"))] // Only compile schema_url when not targeting wasm32
         #[arg(short = 'u', long, conflicts_with = "schema")]
         schema_url: Option<String>,
     },
@@ -57,6 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             key,
             output_vc,
             schema,
+            #[cfg(not(target_arch = "wasm32"))] // Only compile schema_url when not targeting wasm32
             schema_url,
         } => {
             // Read the unsigned VC file
@@ -77,15 +79,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Read the private key
             let private_key = fs::read(key)?;
-
             // Sign the VC based on schema validation options
             let signed_vc = if let Some(schema_path) = schema {
                 let schema_str = fs::read_to_string(schema_path)?;
                 unsigned_vc.sign_with_schema_check(&private_key, &schema_str)?
-            } else if let Some(url) = schema_url {
-                unsigned_vc.sign_with_schema_check_from_url(private_key, &url)?
             } else {
-                unsigned_vc.sign(&private_key)?
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some(url) = schema_url {
+                    unsigned_vc.sign_with_schema_check_from_url(&private_key, &url)?
+                } else {
+                    unsigned_vc.sign(&private_key)?
+                }
+
+                #[cfg(target_arch = "wasm32")]
+                {
+                    println!("URL schema validation is not supported in the WASM build, skipping schema validation.");
+                    unsigned_vc.sign(&private_key)?
+                }
             };
 
             // Save the signed VC

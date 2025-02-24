@@ -64,7 +64,7 @@ wasm-pack 0.13.1
 
 By default it will build in the `pkg` directory.
 
-I have put an example usage of the WASM functionality in the browser inside the [./wasm_js_example_usage directory](./wasm_js_example_usage). 
+I have put an example usage of the WASM functionality in the browser inside the [./wasm_js_example_usage directory](./wasm_js_example_usage).
 
 If you compile it inside that directory in a directory called pkg like so:
 
@@ -83,3 +83,10 @@ When you load the page in a browser and open the console you should see the sign
 ![Screenshot showing example web page and console logs](./wasm_js_example_usage/screenshot.png)
 
 The load_keys.mjs Node.js script can be used to print a private and public key to the command line in a format which can be copied into the index.js file for testing/example usage purposes.
+
+# Testing
+
+To run the automated tests, you can run:
+
+- `cargo test` for the native tests
+- `wasm-pack test --node` for the WASM tests
