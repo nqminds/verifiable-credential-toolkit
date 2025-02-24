@@ -1,12 +1,15 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
 use chrono::{DateTime, Utc};
-use ring::signature::{Ed25519KeyPair, UnparsedPublicKey, ED25519};
+use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
-use serde_json::{to_string, Value};
+use serde_json::Value;
 use serde_with::formats::PreferOne;
 use serde_with::{serde_as, OneOrMany};
 use std::collections::HashMap;
 use url::Url;
+
+#[cfg(target_arch = "wasm32")]
+pub mod wasm;
 
 /// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - <https://www.w3.org/TR/vc-data-model-2.0> WITHOUT the proof
 #[serde_as]
@@ -252,17 +255,16 @@ impl UnsignedVerifiableCredential {
     /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue.
     pub fn sign(
         self,
-        private_key: impl AsRef<[u8]>,
+        private_key: &[u8],
     ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
-        let private_key =
-            Ed25519KeyPair::from_pkcs8(private_key.as_ref()).map_err(|e| e.to_string())?;
-        let proof_value = private_key.sign(
-            to_string(&self)
-                .expect("Failed to serialize unsigned verifiable credential")
-                .as_bytes(),
-        );
+        let private_key_array: [u8; 32] = private_key
+            .try_into()
+            .map_err(|_| "Private key file is not exactly 32 bytes")?;
+        let signing_key = SigningKey::from_bytes(&private_key_array);
+        let message = serde_json::to_string(&self)?.as_bytes().to_vec();
+        let signature = signing_key.sign(&message);
 
-        let proof: Proof = Proof {
+        let proof = Proof {
             id: None,
             proof_type: "Ed25519Signature2018".to_string(),
             proof_purpose: "assertionMethod".to_string(),
@@ -272,7 +274,7 @@ impl UnsignedVerifiableCredential {
             expires: None,
             domain: None,
             challenge: None,
-            proof_value: BASE64_STANDARD.encode(proof_value.as_ref()),
+            proof_value: BASE64_STANDARD.encode(signature.to_bytes()),
             previous_proof: None,
             nonce: None,
         };
@@ -298,9 +300,13 @@ impl UnsignedVerifiableCredential {
         }
 
         // Proceed with signing if validation is successful
-        let private_key =
-            Ed25519KeyPair::from_pkcs8(private_key.as_ref()).map_err(|e| e.to_string())?;
-        let proof_value = private_key.sign(self.id.as_ref().unwrap().as_str().as_bytes());
+        let bytes = private_key.as_ref();
+        let private_key_array: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| "Private key must be exactly 32 bytes")?;
+        let signing_key = SigningKey::from_bytes(&private_key_array);
+        let proof_value = signing_key.sign(self.id.as_ref().unwrap().as_str().as_bytes());
+        let proof_bytes = proof_value.to_bytes();
 
         let proof: Proof = Proof {
             id: None,
@@ -312,7 +318,7 @@ impl UnsignedVerifiableCredential {
             expires: None,
             domain: None,
             challenge: None,
-            proof_value: BASE64_STANDARD.encode(proof_value.as_ref()),
+            proof_value: BASE64_STANDARD.encode(proof_bytes),
             previous_proof: None,
             nonce: None,
         };
@@ -322,7 +328,10 @@ impl UnsignedVerifiableCredential {
             proof,
         })
     }
+}
 
+#[cfg(not(target_arch = "wasm32"))]
+impl UnsignedVerifiableCredential {
     /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue. Also performs a JSON schema check on the credentialSubject. The schema is fetched from a URL.
     pub fn sign_with_schema_check_from_url(
         self,
@@ -340,9 +349,13 @@ impl UnsignedVerifiableCredential {
         }
 
         // Proceed with signing if validation is successful
-        let private_key =
-            Ed25519KeyPair::from_pkcs8(private_key.as_ref()).map_err(|e| e.to_string())?;
-        let proof_value = private_key.sign(self.id.as_ref().unwrap().as_str().as_bytes());
+        let bytes = private_key.as_ref();
+        let private_key_array: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| "Private key must be exactly 32 bytes")?;
+        let signing_key = SigningKey::from_bytes(&private_key_array);
+        let proof_value = signing_key.sign(self.id.as_ref().unwrap().as_str().as_bytes());
+        let proof_bytes = proof_value.to_bytes();
 
         let proof: Proof = Proof {
             id: None,
@@ -354,7 +367,7 @@ impl UnsignedVerifiableCredential {
             expires: None,
             domain: None,
             challenge: None,
-            proof_value: BASE64_STANDARD.encode(proof_value.as_ref()),
+            proof_value: BASE64_STANDARD.encode(proof_bytes),
             previous_proof: None,
             nonce: None,
         };
@@ -374,21 +387,15 @@ impl VerifiableCredential {
 
     /// Verifies the contents of a Verifiable Credential against a public key
     pub fn verify(&self, public_key: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-        let public_key = UnparsedPublicKey::new(&ED25519, public_key);
+        let message = serde_json::to_string(&self.unsigned)?;
+        let proof_bytes = BASE64_STANDARD.decode(&self.proof.proof_value)?;
+        let signature = Signature::from_slice(&proof_bytes)?;
+        let public_key_array: [u8; 32] = public_key
+            .try_into()
+            .map_err(|_| "Private key must be exactly 32 bytes")?;
+        let public_key = VerifyingKey::from_bytes(&public_key_array)?;
 
-        let proof_value = BASE64_STANDARD
-            .decode(&self.proof.proof_value)
-            .map_err(|e| format!("Failed to decode proof value: {}", e))?;
-
-        let clone = self.clone().to_unsigned();
-        public_key
-            .verify(
-                to_string(&clone)
-                    .map_err(|e| format!("Failed to serialize credential: {}", e))?
-                    .as_bytes(),
-                &proof_value,
-            )
-            .map_err(|e| format!("Verification failed: {}", e))?;
+        public_key.verify(message.as_bytes(), &signature)?;
         Ok(())
     }
 }

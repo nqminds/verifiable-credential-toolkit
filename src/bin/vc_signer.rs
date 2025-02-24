@@ -35,6 +35,17 @@ enum Commands {
         #[arg(short = 'u', long, conflicts_with = "schema")]
         schema_url: Option<String>,
     },
+
+    /// Verify a verifiable credential
+    Verify {
+        /// Path to the signed VC JSON file
+        #[arg(short, long)]
+        input_vc: PathBuf,
+
+        /// Path to the private key file
+        #[arg(short, long)]
+        key: PathBuf,
+    },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -83,6 +94,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             println!("Successfully signed the verifiable credential!");
             Ok(())
+        }
+        Commands::Verify { input_vc, key } => {
+            // Read the signed VC file
+            let signed_vc_str = fs::read_to_string(input_vc)?;
+
+            // Try to deserialize to UnsignedVerifiableCredential first
+            let signed_vc: Result<VerifiableCredential, _> = serde_json::from_str(&signed_vc_str);
+
+            let signed_vc = match signed_vc {
+                Ok(vc) => vc,
+                Err(_) => {
+                    // If deserialization fails, try to deserialize to VerifiableCredential and convert
+                    let verifiable_vc: VerifiableCredential = serde_json::from_str(&signed_vc_str)?;
+                    verifiable_vc
+                }
+            };
+
+            // Read the public key
+            let public_key = fs::read(key)?;
+
+            // Verify the VC
+            let result = signed_vc.verify(&public_key);
+
+            match result {
+                Ok(_) => {
+                    println!("Successfully verified the verifiable credential!");
+                    Ok(())
+                }
+                Err(err) => Err(err),
+            }
         }
     }
 }
