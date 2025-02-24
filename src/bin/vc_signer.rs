@@ -32,6 +32,7 @@ enum Commands {
         schema: Option<PathBuf>,
 
         /// Optional schema URL for validation
+        #[cfg(not(target_arch = "wasm32"))] // Only compile schema_url when not targeting wasm32
         #[arg(short = 'u', long, conflicts_with = "schema")]
         schema_url: Option<String>,
     },
@@ -57,6 +58,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             key,
             output_vc,
             schema,
+            #[cfg(not(target_arch = "wasm32"))] // Only compile schema_url when not targeting wasm32
             schema_url,
         } => {
             // Read the unsigned VC file
