@@ -77,15 +77,23 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Read the private key
             let private_key = fs::read(key)?;
-
             // Sign the VC based on schema validation options
             let signed_vc = if let Some(schema_path) = schema {
                 let schema_str = fs::read_to_string(schema_path)?;
                 unsigned_vc.sign_with_schema_check(&private_key, &schema_str)?
-            } else if let Some(url) = schema_url {
-                unsigned_vc.sign_with_schema_check_from_url(private_key, &url)?
             } else {
-                unsigned_vc.sign(&private_key)?
+                #[cfg(not(target_arch = "wasm32"))]
+                if let Some(url) = schema_url {
+                    unsigned_vc.sign_with_schema_check_from_url(&private_key, &url)?
+                } else {
+                    unsigned_vc.sign(&private_key)?
+                }
+
+                #[cfg(target_arch = "wasm32")]
+                {
+                    println!("URL schema validation is not supported in the WASM build, skipping schema validation.");
+                    unsigned_vc.sign(&private_key)?
+                }
             };
 
             // Save the signed VC
