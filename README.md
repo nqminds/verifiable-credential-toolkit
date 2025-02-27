@@ -47,17 +47,17 @@ Options:
   -V, --version          Print version
 ```
 
-# WASM Compilation and Usage
+# WASM Compilation and Usage in Client-side Javascript in the browser
 
-You can compile the sign and verify functions for WASM like so:
+You can compile the sign and verify functions for web based WASM like so:
 
-```
+```bash
 wasm-pack build --target web
 ```
 
 Tested with:
 
-```
+```bash
 wasm-pack --version
 wasm-pack 0.13.1
 ```
@@ -74,7 +74,7 @@ wasm-pack build --target web --out-dir wasm_js_example_usage/pkg
 
 Then run the web server at localhost 8080 with:
 
-```
+```bash
 python3 -m http.server 8080
 ```
 
@@ -84,9 +84,46 @@ When you load the page in a browser and open the console you should see the sign
 
 The load_keys.mjs Node.js script can be used to print a private and public key to the command line in a format which can be copied into the index.js file for testing/example usage purposes.
 
-# Testing
+# WASM Compilation and Usage in Node.js
 
-To run the automated tests, you can run:
+You can compile the sign and verify functions for nodejs based WASM like so:
 
-- `cargo test` for the native tests
-- `wasm-pack test --node` for the WASM tests
+```
+wasm-pack build --target nodejs
+```
+
+I have put an example usage of the WASM functionality in a node script inside the [./wasm_nodejs_example_usage directory](./wasm_nodejs_example_usage).
+
+
+If you compile it inside that directory in a directory called pkg like so:
+
+```bash
+wasm-pack build --target nodejs --out-dir wasm_nodejs_example_usage/pkg
+```
+
+Then run the node script like so:
+
+```bash
+node index.js
+```
+
+It should log your VC to the console and the result of verification like so:
+
+```bash
+Signed VC: Map(6) {
+'@context' => [ 'https://www.w3.org/2018/credentials/v1' ],
+'id' => 'http://example.com/credentials/3732',
+'type' => 'VerifiableCredential',
+'issuer' => 'https://example.com/issuers/14',
+'credentialSubject' => Map(1) { 'id' => 'did:example:abcdef' },
+'proof' => {
+type: 'Ed25519Signature2018',
+proofPurpose: 'assertionMethod',
+verificationMethod: undefined,
+cryptosuite: 'eddsa-rdfc-2022',
+created: '2025-02-27T10:17:09.806Z',
+proofValue: 'ShO0cQNI3whBuwYNh2EDY3Mua/NLpu5n5QlC5vLQCv4aya5/vQI64avSZ2JcQOpUCf1SPQtzMDeurHNka8CmBA=='
+ }
+}
+Verification result: true
+```
