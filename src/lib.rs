@@ -257,11 +257,14 @@ impl UnsignedVerifiableCredential {
         self,
         private_key: &[u8],
     ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
-        let private_key_array: [u8; 32] = private_key
-            .try_into()
-            .map_err(|_| "Private key file is not exactly 32 bytes")?;
+        let private_key_array: [u8; 32] = private_key.try_into().map_err(|_| {
+            "Invalid private key length: expected 32 bytes, but received a different size."
+        })?;
         let signing_key = SigningKey::from_bytes(&private_key_array);
-        let message = serde_json::to_string(&self)?.as_bytes().to_vec();
+        let message = serde_json::to_string(&self)
+            .map_err(|e| format!("Failed to serialize credential during sign: {}", e))?
+            .as_bytes()
+            .to_vec();
         let signature = signing_key.sign(&message);
 
         let proof = Proof {
@@ -292,7 +295,8 @@ impl UnsignedVerifiableCredential {
         schema: &str,
     ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
         // Validate the credentialSubject against the provided schema
-        let schema: Value = serde_json::from_str(schema)?;
+        let schema: Value =
+            serde_json::from_str(schema).map_err(|e| format!("Failed to parse schema: {}", e))?;
         let credential_subject = &self.credential_subject;
 
         if !jsonschema::is_valid(&schema, credential_subject) {
@@ -301,9 +305,9 @@ impl UnsignedVerifiableCredential {
 
         // Proceed with signing if validation is successful
         let bytes = private_key.as_ref();
-        let private_key_array: [u8; 32] = bytes
-            .try_into()
-            .map_err(|_| "Private key must be exactly 32 bytes")?;
+        let private_key_array: [u8; 32] = bytes.try_into().map_err(|_| {
+            "Invalid private key length: expected 32 bytes, but received a different size."
+        })?;
         let signing_key = SigningKey::from_bytes(&private_key_array);
         let proof_value = signing_key.sign(self.id.as_ref().unwrap().as_str().as_bytes());
         let proof_bytes = proof_value.to_bytes();
@@ -340,7 +344,13 @@ impl UnsignedVerifiableCredential {
     ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
         // Attempt to get the schema from the URL using reqwest
 
-        let schema: Value = serde_json::from_str(&reqwest::blocking::get(schema_url)?.text()?)?;
+        let response = reqwest::blocking::get(schema_url)
+            .map_err(|e| format!("Failed to fetch schema from URL: {}", e))?;
+        let schema_text = response
+            .text()
+            .map_err(|e| format!("Failed to read schema text: {}", e))?;
+        let schema: Value = serde_json::from_str(&schema_text)
+            .map_err(|e| format!("Failed to parse schema JSON: {}", e))?;
 
         // Validate the credentialSubject against the schema
         let credential_subject = &self.credential_subject;
@@ -350,9 +360,9 @@ impl UnsignedVerifiableCredential {
 
         // Proceed with signing if validation is successful
         let bytes = private_key.as_ref();
-        let private_key_array: [u8; 32] = bytes
-            .try_into()
-            .map_err(|_| "Private key must be exactly 32 bytes")?;
+        let private_key_array: [u8; 32] = bytes.try_into().map_err(|_| {
+            "Invalid private key length: expected 32 bytes, but received a different size."
+        })?;
         let signing_key = SigningKey::from_bytes(&private_key_array);
         let proof_value = signing_key.sign(self.id.as_ref().unwrap().as_str().as_bytes());
         let proof_bytes = proof_value.to_bytes();
@@ -387,15 +397,30 @@ impl VerifiableCredential {
 
     /// Verifies the contents of a Verifiable Credential against a public key
     pub fn verify(&self, public_key: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
-        let message = serde_json::to_string(&self.unsigned)?;
-        let proof_bytes = BASE64_STANDARD.decode(&self.proof.proof_value)?;
-        let signature = Signature::from_slice(&proof_bytes)?;
-        let public_key_array: [u8; 32] = public_key
-            .try_into()
-            .map_err(|_| "Private key must be exactly 32 bytes")?;
-        let public_key = VerifyingKey::from_bytes(&public_key_array)?;
+        let message = serde_json::to_string(&self.unsigned).map_err(|e| {
+            format!(
+                "Failed to serialize unsigned credential during verification: {}",
+                e
+            )
+        })?;
+        let proof_bytes = BASE64_STANDARD
+            .decode(&self.proof.proof_value)
+            .map_err(|e| format!("Failed to decode proof value from base64: {}", e))?;
+        let signature = Signature::from_slice(&proof_bytes)
+            .map_err(|e| format!("Failed to create signature from proof bytes: {}", e))?;
+        let public_key_array: [u8; 32] = public_key.try_into().map_err(|_| {
+            "Invalid private key length: expected 32 bytes, but received a different size."
+        })?;
+        let public_key = VerifyingKey::from_bytes(&public_key_array).map_err(|e| {
+            format!(
+                "Failed to create verifying key from public key bytes: {}",
+                e
+            )
+        })?;
 
-        public_key.verify(message.as_bytes(), &signature)?;
+        public_key
+            .verify(message.as_bytes(), &signature)
+            .map_err(|e| format!("Failed to verify the credential signature: {}", e))?;
         Ok(())
     }
 }
