@@ -426,7 +426,7 @@ impl VerifiableCredential {
     }
 }
 
-/// Generate a new Ed25519 keypair tuple. First is the private key, second is the public key.
+/// Generate a new Ed25519 keypair tuple. First is the signing key, second is the verifying key.
 pub fn generate_keypair() -> ([u8; 32], [u8; 32]) {
     let mut csprng = OsRng;
     let signing_key = SigningKey::generate(&mut csprng);
