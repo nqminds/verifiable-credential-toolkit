@@ -1,6 +1,7 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::formats::PreferOne;
@@ -423,4 +424,17 @@ impl VerifiableCredential {
             .map_err(|e| format!("Failed to verify the credential signature: {}", e))?;
         Ok(())
     }
+}
+
+/// Generate a new Ed25519 keypair tuple. First is the private key, second is the public key.
+pub fn generate_keypair() -> ([u8; 32], [u8; 32]) {
+    let mut csprng = OsRng;
+    let signing_key = SigningKey::generate(&mut csprng);
+    let verifying_key: VerifyingKey = signing_key.verifying_key();
+
+    let signing_key_bytes = signing_key.to_bytes();
+
+    let verifying_key_bytes = verifying_key.to_bytes();
+
+    (signing_key_bytes, verifying_key_bytes)
 }
