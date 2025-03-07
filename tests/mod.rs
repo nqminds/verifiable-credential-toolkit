@@ -310,4 +310,17 @@ mod tests {
 
         assert!(verify_result.is_err());
     }
+
+    #[test]
+    fn deseralize_invalid_vc() {
+        let vc: Result<VerifiableCredential, _> = serde_json::from_str(include_str!(
+            "test_data/verifiable_credentials/invalid_vc.json"
+        ));
+
+        if let Err(ref e) = vc {
+            println!("{}", e);
+        }
+
+        assert!(vc.is_err());
+    }
 }
