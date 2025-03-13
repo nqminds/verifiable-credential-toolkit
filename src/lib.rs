@@ -256,9 +256,10 @@ impl UnsignedVerifiableCredential {
     /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue.
     pub fn sign(
         self,
-        private_key: &[u8],
+        private_key: impl AsRef<[u8]>,
     ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
-        let private_key_array: [u8; 32] = private_key.try_into().map_err(|_| {
+        let private_key_slice = private_key.as_ref();
+        let private_key_array: [u8; 32] = private_key_slice.try_into().map_err(|_| {
             "Invalid private key length: expected 32 bytes, but received a different size."
         })?;
         let signing_key = SigningKey::from_bytes(&private_key_array);
@@ -305,15 +306,18 @@ impl UnsignedVerifiableCredential {
         }
 
         // Proceed with signing if validation is successful
-        let bytes = private_key.as_ref();
-        let private_key_array: [u8; 32] = bytes.try_into().map_err(|_| {
+        let private_key_slice = private_key.as_ref();
+        let private_key_array: [u8; 32] = private_key_slice.try_into().map_err(|_| {
             "Invalid private key length: expected 32 bytes, but received a different size."
         })?;
         let signing_key = SigningKey::from_bytes(&private_key_array);
-        let proof_value = signing_key.sign(self.id.as_ref().unwrap().as_str().as_bytes());
-        let proof_bytes = proof_value.to_bytes();
+        let message = serde_json::to_string(&self)
+            .map_err(|e| format!("Failed to serialize credential during sign: {}", e))?
+            .as_bytes()
+            .to_vec();
+        let signature = signing_key.sign(&message);
 
-        let proof: Proof = Proof {
+        let proof = Proof {
             id: None,
             proof_type: "Ed25519Signature2018".to_string(),
             proof_purpose: "assertionMethod".to_string(),
@@ -323,7 +327,7 @@ impl UnsignedVerifiableCredential {
             expires: None,
             domain: None,
             challenge: None,
-            proof_value: BASE64_STANDARD.encode(proof_bytes),
+            proof_value: BASE64_STANDARD.encode(signature.to_bytes()),
             previous_proof: None,
             nonce: None,
         };
@@ -360,15 +364,18 @@ impl UnsignedVerifiableCredential {
         }
 
         // Proceed with signing if validation is successful
-        let bytes = private_key.as_ref();
-        let private_key_array: [u8; 32] = bytes.try_into().map_err(|_| {
+        let private_key_slice = private_key.as_ref();
+        let private_key_array: [u8; 32] = private_key_slice.try_into().map_err(|_| {
             "Invalid private key length: expected 32 bytes, but received a different size."
         })?;
         let signing_key = SigningKey::from_bytes(&private_key_array);
-        let proof_value = signing_key.sign(self.id.as_ref().unwrap().as_str().as_bytes());
-        let proof_bytes = proof_value.to_bytes();
+        let message = serde_json::to_string(&self)
+            .map_err(|e| format!("Failed to serialize credential during sign: {}", e))?
+            .as_bytes()
+            .to_vec();
+        let signature = signing_key.sign(&message);
 
-        let proof: Proof = Proof {
+        let proof = Proof {
             id: None,
             proof_type: "Ed25519Signature2018".to_string(),
             proof_purpose: "assertionMethod".to_string(),
@@ -378,7 +385,7 @@ impl UnsignedVerifiableCredential {
             expires: None,
             domain: None,
             challenge: None,
-            proof_value: BASE64_STANDARD.encode(proof_bytes),
+            proof_value: BASE64_STANDARD.encode(signature.to_bytes()),
             previous_proof: None,
             nonce: None,
         };
