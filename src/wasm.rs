@@ -1,72 +1,99 @@
 use crate::UnsignedVerifiableCredential;
 use crate::VerifiableCredential;
 use ed25519_dalek::{SigningKey, VerifyingKey};
+use js_sys::{Array, Reflect};
 use rand::rngs::OsRng;
-use serde_json::{Map, Value};
 use serde_wasm_bindgen::{from_value, to_value};
 use wasm_bindgen::prelude::*;
 
-// Helper function to normalize a JsValue by removing undefined values
-fn normalize_js_value(js_value: &JsValue) -> Result<JsValue, JsError> {
-    // Convert JsValue to serde_json::Value for easier manipulation
-    let value_str = js_sys::JSON::stringify(js_value)
-        .map_err(|_| JsError::new("Failed to stringify JsValue"))?;
-    let value_str = value_str
-        .as_string()
-        .ok_or_else(|| JsError::new("Failed to get string from JsValue"))?;
+// Helper function to normalize a JS object by removing undefined values
+#[wasm_bindgen]
+pub fn normalize_object(input: &JsValue) -> Result<JsValue, JsError> {
+    if input.is_undefined() {
+        // Return undefined as is
+        return Ok(JsValue::undefined());
+    } else if input.is_null() {
+        // Return null as is
+        return Ok(JsValue::null());
+    } else if Array::is_array(input) {
+        // Handle array case
+        let array = Array::from(input);
+        let result = Array::new();
 
-    // Parse string to serde_json::Value
-    let mut json_value: Value = serde_json::from_str(&value_str)
-        .map_err(|e| JsError::new(&format!("Failed to parse JSON: {}", e)))?;
+        for i in 0..array.length() {
+            let item = array.get(i);
 
-    // Normalize the JSON value (remove null values which were undefined in JS)
-    normalize_json_value(&mut json_value);
+            // Skip undefined items in arrays
+            if item.is_undefined() {
+                continue;
+            }
 
-    // Convert back to JsValue
-    let normalized_str = serde_json::to_string(&json_value)
-        .map_err(|e| JsError::new(&format!("Failed to serialize JSON: {}", e)))?;
+            // Recursively normalize array items
+            let normalized_item = normalize_object(&item)?;
+            result.push(&normalized_item);
+        }
 
-    let normalized_js = js_sys::JSON::parse(&normalized_str)
-        .map_err(|_| JsError::new("Failed to parse normalized JSON"))?;
+        return Ok(result.into());
+    } else if input.is_object() {
+        // Handle regular object case
+        let obj = js_sys::Object::from(input.clone());
+        let result = js_sys::Object::new();
 
-    Ok(normalized_js.into())
+        // Get all own properties
+        let keys = js_sys::Object::keys(&obj);
+        let keys_len = keys.length();
+
+        for i in 0..keys_len {
+            let key = keys.get(i);
+
+            // Get property value
+            let value =
+                Reflect::get(&obj, &key).map_err(|_| JsError::new("Failed to get property"))?;
+
+            // Skip undefined values
+            if value.is_undefined() {
+                continue;
+            }
+
+            // Recursively normalize the value
+            let normalized_value = normalize_object(&value)?;
+
+            // Set property on result object
+            Reflect::set(&result, &key, &normalized_value)
+                .map_err(|_| JsError::new("Failed to set property"))?;
+        }
+
+        return Ok(result.into());
+    }
+
+    // For primitive values, return as is
+    Ok(input.clone())
 }
 
-// Recursively normalize a serde_json::Value by removing null values
-fn normalize_json_value(value: &mut Value) {
-    match value {
-        Value::Object(map) => {
-            // Collect keys to remove (can't remove while iterating)
-            let keys_to_remove: Vec<String> = map
-                .iter()
-                .filter(|(_, v)| v.is_null())
-                .map(|(k, _)| k.clone())
-                .collect();
+// Function to normalize a value and then convert to string for debugging
+#[wasm_bindgen]
+pub fn normalize_and_stringify(input: &JsValue) -> Result<String, JsError> {
+    let normalized = normalize_object(input)?;
+    let json = js_sys::JSON::stringify(&normalized)
+        .map_err(|_| JsError::new("Failed to stringify normalized object"))?;
 
-            // Remove null values
-            for key in keys_to_remove {
-                map.remove(&key);
-            }
-
-            // Recursively normalize nested objects
-            for (_, v) in map.iter_mut() {
-                normalize_json_value(v);
-            }
-        }
-        Value::Array(arr) => {
-            // Recursively normalize array elements
-            for item in arr.iter_mut() {
-                normalize_json_value(item);
-            }
-        }
-        _ => {}
-    }
+    Ok(json.as_string().unwrap_or_default())
 }
 
 #[wasm_bindgen]
 pub fn sign(unsigned_vc: JsValue, private_key: &[u8]) -> Result<JsValue, JsError> {
-    // Normalize the unsigned VC by removing undefined values
-    let normalized_vc = normalize_js_value(&unsigned_vc)?;
+    // First convert to JSON and back to ensure we have a clean object
+    let json_str = js_sys::JSON::stringify(&unsigned_vc)
+        .map_err(|_| JsError::new("Failed to stringify input"))?;
+    let clean_obj = js_sys::JSON::parse(
+        &json_str
+            .as_string()
+            .ok_or_else(|| JsError::new("Failed to get string"))?,
+    )
+    .map_err(|_| JsError::new("Failed to parse JSON"))?;
+
+    // Then normalize to remove undefined values
+    let normalized_vc = normalize_object(&clean_obj)?;
 
     // Process with the normalized value
     let unsigned: UnsignedVerifiableCredential = from_value(normalized_vc).map_err(|e| {
@@ -86,7 +113,7 @@ pub fn sign(unsigned_vc: JsValue, private_key: &[u8]) -> Result<JsValue, JsError
 #[wasm_bindgen]
 pub fn verify(signed_vc: JsValue, public_key: &[u8]) -> Result<bool, JsError> {
     // Also normalize during verification for consistency
-    let normalized_vc = normalize_js_value(&signed_vc)?;
+    let normalized_vc = normalize_object(&signed_vc)?;
 
     let vc: VerifiableCredential = from_value(normalized_vc).map_err(|e| {
         JsError::new(&format!(
