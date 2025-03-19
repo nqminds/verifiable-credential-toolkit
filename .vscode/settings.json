@@ -1,3 +1,8 @@
 {
-  "conventionalCommits.scopes": ["lib", "generate_keys", "vc_signer"]
+  "conventionalCommits.scopes": [
+    "lib",
+    "generate_keys",
+    "vc_signer",
+    "wasm"
+  ]
 }
