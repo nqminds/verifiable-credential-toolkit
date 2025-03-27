@@ -323,4 +323,80 @@ mod tests {
 
         assert!(vc.is_err());
     }
+
+    #[test]
+    fn valid_from_verification_true_negative() {
+        let private_key = std::fs::read("tests/test_data/keys/key.priv")
+            .expect("Error reading private key from file");
+        let public_key = std::fs::read("tests/test_data/keys/key.pub")
+            .expect("Error reading public key from file");
+
+        let signed_vc = serde_json::from_str::<UnsignedVerifiableCredential>(include_str!(
+            "test_data/verifiable_credentials/unsigned_validFrom_invalid.json"
+        ))
+        .expect("Failed to deserialize JSON")
+        .sign(&private_key)
+        .expect("Failed to sign VC");
+
+        let verify_result = signed_vc.verify(&public_key);
+
+        assert!(verify_result.is_err());
+    }
+
+    #[test]
+    fn valid_until_verification_true_negative() {
+        let private_key = std::fs::read("tests/test_data/keys/key.priv")
+            .expect("Error reading private key from file");
+        let public_key = std::fs::read("tests/test_data/keys/key.pub")
+            .expect("Error reading public key from file");
+
+        let signed_vc = serde_json::from_str::<UnsignedVerifiableCredential>(include_str!(
+            "test_data/verifiable_credentials/unsigned_validUntil_invalid.json"
+        ))
+        .expect("Failed to deserialize JSON")
+        .sign(&private_key)
+        .expect("Failed to sign VC");
+
+        let verify_result = signed_vc.verify(&public_key);
+
+        assert!(verify_result.is_err());
+    }
+
+    #[test]
+    fn valid_from_verification_true_positive() {
+        let private_key = std::fs::read("tests/test_data/keys/key.priv")
+            .expect("Error reading private key from file");
+        let public_key = std::fs::read("tests/test_data/keys/key.pub")
+            .expect("Error reading public key from file");
+
+        let signed_vc = serde_json::from_str::<UnsignedVerifiableCredential>(include_str!(
+            "test_data/verifiable_credentials/unsigned_validFrom_valid.json"
+        ))
+        .expect("Failed to deserialize JSON")
+        .sign(&private_key)
+        .expect("Failed to sign VC");
+
+        let verify_result = signed_vc.verify(&public_key);
+
+        assert!(verify_result.is_ok());
+    }
+
+    #[test]
+    fn valid_until_verification_true_positive() {
+        let private_key = std::fs::read("tests/test_data/keys/key.priv")
+            .expect("Error reading private key from file");
+        let public_key = std::fs::read("tests/test_data/keys/key.pub")
+            .expect("Error reading public key from file");
+
+        let signed_vc = serde_json::from_str::<UnsignedVerifiableCredential>(include_str!(
+            "test_data/verifiable_credentials/unsigned_validUntil_valid.json"
+        ))
+        .expect("Failed to deserialize JSON")
+        .sign(&private_key)
+        .expect("Failed to sign VC");
+
+        let verify_result = signed_vc.verify(&public_key);
+
+        assert!(verify_result.is_ok());
+    }
 }
