@@ -112,10 +112,7 @@ pub fn sign(unsigned_vc: JsValue, private_key: &[u8]) -> Result<JsValue, JsError
 
 #[wasm_bindgen]
 pub fn verify(signed_vc: JsValue, public_key: &[u8]) -> Result<bool, JsError> {
-    // Also normalize during verification for consistency
-    let normalized_vc = normalize_object(&signed_vc)?;
-
-    let vc: VerifiableCredential = from_value(normalized_vc).map_err(|e| {
+    let vc: VerifiableCredential = from_value(signed_vc).map_err(|e| {
         JsError::new(&format!(
             "Failed to deserialize signed verifiable credential: {}",
             e
