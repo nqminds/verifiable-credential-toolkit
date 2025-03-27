@@ -162,7 +162,7 @@ pub struct Proof {
     pub proof_type: String,
     #[serde(rename = "proofPurpose")]
     pub proof_purpose: String,
-    #[serde(rename = "verificationMethod")]
+    #[serde(rename = "verificationMethod", skip_serializing_if = "Option::is_none")]
     pub verification_method: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cryptosuite: Option<String>,
@@ -170,8 +170,8 @@ pub struct Proof {
     pub created: Option<DateTime<Utc>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expires: Option<DateTime<Utc>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
     #[serde_as(as = "Option<OneOrMany<_, PreferOne>>")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub domain: Option<Vec<String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub challenge: Option<String>,
