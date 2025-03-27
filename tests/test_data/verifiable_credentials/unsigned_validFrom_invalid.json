@@ -1,0 +1,14 @@
+{
+  "@context": ["https://www.w3.org/ns/credentials/v2"],
+  "id": "urn:uuid:056bdf5f-b263-4af4-be9d-cfd5b40265ce",
+  "type": "VerifiableCredential",
+  "issuer": "http://localhost:3001/api/auth/identity?email=tony@nqminds.com",
+  "credentialSubject": {
+    "name": "test"
+  },
+  "validFrom": "2030-03-29T12:44:00.577Z",
+  "credentialSchema": {
+    "id": "https://github.com/nqminds/Trusted-AI-BOM/blob/main/packages/schemas/src/taibom-schemas/10-data.v1.0.0.schema.yaml",
+    "type": "JsonSchema"
+  }
+}

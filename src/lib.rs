@@ -405,6 +405,20 @@ impl VerifiableCredential {
 
     /// Verifies the contents of a Verifiable Credential against a public key
     pub fn verify(&self, public_key: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+        let now = Utc::now();
+
+        // Check if the current timestamp is within the validity period
+        if let Some(valid_from) = self.unsigned.valid_from {
+            if now < valid_from {
+                return Err("The credential is not yet valid (validFrom check failed).".into());
+            }
+        }
+        if let Some(valid_until) = self.unsigned.valid_until {
+            if now > valid_until {
+                return Err("The credential has expired (validUntil check failed).".into());
+            }
+        }
+
         let message = serde_json::to_string(&self.unsigned).map_err(|e| {
             format!(
                 "Failed to serialize unsigned credential during verification: {}",
@@ -417,7 +431,7 @@ impl VerifiableCredential {
         let signature = Signature::from_slice(&proof_bytes)
             .map_err(|e| format!("Failed to create signature from proof bytes: {}", e))?;
         let public_key_array: [u8; 32] = public_key.try_into().map_err(|_| {
-            "Invalid private key length: expected 32 bytes, but received a different size."
+            "Invalid public key length: expected 32 bytes, but received a different size."
         })?;
         let public_key = VerifyingKey::from_bytes(&public_key_array).map_err(|e| {
             format!(
