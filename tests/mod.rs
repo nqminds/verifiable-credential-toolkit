@@ -92,10 +92,12 @@ mod tests {
         let private_key: &[u8] = &std::fs::read("tests/test_data/keys/key.priv")
             .expect("Error reading private key from file");
 
-        let schema = include_str!("test_data/schemas/schema.json");
+        let schema_str = include_str!("test_data/schemas/schema.json");
+        let schema: serde_json::Value =
+            serde_json::from_str(schema_str).expect("Failed to parse schema JSON");
 
         let signed_vc = vc
-            .sign_with_schema_check(private_key, schema)
+            .sign_with_schema_check(private_key, &schema)
             .expect("Failed to sign VC");
 
         assert!(serde_json::to_string(&signed_vc).is_ok());
@@ -111,9 +113,11 @@ mod tests {
         let private_key: &[u8] = &std::fs::read("tests/test_data/keys/key.priv")
             .expect("Error reading private key from file");
 
-        let schema = include_str!("test_data/schemas/schema_fail.json");
+        let schema_str = include_str!("test_data/schemas/schema_fail.json");
+        let schema: serde_json::Value =
+            serde_json::from_str(schema_str).expect("Failed to parse schema JSON");
 
-        let signed_vc = vc.sign_with_schema_check(private_key, schema);
+        let signed_vc = vc.sign_with_schema_check(private_key, &schema);
 
         assert!(signed_vc.is_err());
     }
@@ -414,9 +418,11 @@ mod tests {
         .sign(private_key)
         .expect("Failed to sign VC");
 
-        let schema = include_str!("test_data/schemas/schema.json");
+        let schema_str = include_str!("test_data/schemas/schema.json");
+        let schema: serde_json::Value =
+            serde_json::from_str(schema_str).expect("Failed to parse schema JSON");
 
-        let verify_result = vc.verify_with_schema_check(&public_key, schema);
+        let verify_result = vc.verify_with_schema_check(&public_key, &schema);
 
         assert!(verify_result.is_ok());
     }
@@ -435,9 +441,11 @@ mod tests {
         .sign(private_key)
         .expect("Failed to sign VC");
 
-        let schema = include_str!("test_data/schemas/schema_fail.json");
+        let schema_str = include_str!("test_data/schemas/schema_fail.json");
+        let schema: serde_json::Value =
+            serde_json::from_str(schema_str).expect("Failed to parse schema JSON");
 
-        let verify_result = vc.verify_with_schema_check(&public_key, schema);
+        let verify_result = vc.verify_with_schema_check(&public_key, &schema);
 
         assert!(verify_result.is_err());
     }

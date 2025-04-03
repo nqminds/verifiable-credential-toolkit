@@ -124,7 +124,6 @@ pub fn verify(signed_vc: JsValue, public_key: &[u8]) -> Result<bool, JsError> {
         Err(_e) => Ok(false),
     }
 }
-
 #[wasm_bindgen]
 pub fn verify_with_schema_check(
     signed_vc: JsValue,
@@ -138,10 +137,9 @@ pub fn verify_with_schema_check(
         ))
     })?;
 
-    let schema_str = serde_wasm_bindgen::from_value::<serde_json::Value>(schema)
-        .map_err(|_| JsError::new("Failed to deserialize schema"))?
-        .to_string();
-    match vc.verify_with_schema_check(public_key, &schema_str) {
+    let schema_value = serde_wasm_bindgen::from_value::<serde_json::Value>(schema)
+        .map_err(|_| JsError::new("Failed to deserialize schema"))?;
+    match vc.verify_with_schema_check(public_key, &schema_value) {
         Ok(_) => Ok(true),
         Err(_e) => Ok(false),
     }
