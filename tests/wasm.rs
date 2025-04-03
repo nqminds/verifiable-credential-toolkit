@@ -89,10 +89,12 @@ mod wasm_tests {
 
         let private_key: &[u8] = include_bytes!("test_data/keys/key.priv");
 
-        let schema = include_str!("test_data/schemas/schema.json");
+        let schema_str = include_str!("test_data/schemas/schema.json");
+        let schema: serde_json::Value =
+            serde_json::from_str(schema_str).expect("Failed to parse schema JSON");
 
         let signed_vc = vc
-            .sign_with_schema_check(private_key, schema)
+            .sign_with_schema_check(private_key, &schema)
             .expect("Failed to sign VC");
 
         assert!(serde_json::to_string(&signed_vc).is_ok());
@@ -107,9 +109,11 @@ mod wasm_tests {
 
         let private_key: &[u8] = include_bytes!("test_data/keys/key.priv");
 
-        let schema = include_str!("test_data/schemas/schema_fail.json");
+        let schema_str = include_str!("test_data/schemas/schema_fail.json");
+        let schema: serde_json::Value =
+            serde_json::from_str(schema_str).expect("Failed to parse schema JSON");
 
-        let signed_vc = vc.sign_with_schema_check(private_key, schema);
+        let signed_vc = vc.sign_with_schema_check(private_key, &schema);
 
         assert!(signed_vc.is_err());
     }

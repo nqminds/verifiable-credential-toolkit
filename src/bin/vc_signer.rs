@@ -82,7 +82,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Sign the VC based on schema validation options
             let signed_vc = if let Some(schema_path) = schema {
                 let schema_str = fs::read_to_string(schema_path)?;
-                unsigned_vc.sign_with_schema_check(&private_key, &schema_str)?
+                let schema_json: serde_json::Value = serde_json::from_str(&schema_str)?;
+                unsigned_vc.sign_with_schema_check(&private_key, &schema_json)?
             } else {
                 #[cfg(not(target_arch = "wasm32"))]
                 if let Some(url) = schema_url {

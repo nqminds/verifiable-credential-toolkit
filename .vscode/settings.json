@@ -3,6 +3,7 @@
     "lib",
     "generate_keys",
     "vc_signer",
-    "wasm"
+    "wasm",
+    "release"
   ]
 }
