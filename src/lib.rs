@@ -445,6 +445,25 @@ impl VerifiableCredential {
             .map_err(|e| format!("Failed to verify the credential signature: {}", e))?;
         Ok(())
     }
+
+    /// Verifies the contents of a Verifiable Credential against a public key and schema
+    pub fn verify_with_schema_check(
+        &self,
+        public_key: &[u8],
+        schema: &str,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        // Validate the credentialSubject against the provided schema
+        let schema: Value =
+            serde_json::from_str(schema).map_err(|e| format!("Failed to parse schema: {}", e))?;
+        let credential_subject = &self.unsigned.credential_subject;
+
+        if !jsonschema::is_valid(&schema, credential_subject) {
+            return Err("Credential subject does not match schema".into());
+        }
+
+        // Proceed with signature verification if validation is successful
+        self.verify(public_key)
+    }
 }
 
 /// Generate a new Ed25519 keypair tuple. First is the signing key, second is the verifying key.
