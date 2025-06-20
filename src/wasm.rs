@@ -124,6 +124,26 @@ pub fn verify(signed_vc: JsValue, public_key: &[u8]) -> Result<bool, JsError> {
         Err(_e) => Ok(false),
     }
 }
+#[wasm_bindgen]
+pub fn verify_with_schema_check(
+    signed_vc: JsValue,
+    public_key: &[u8],
+    schema: JsValue,
+) -> Result<bool, JsError> {
+    let vc: VerifiableCredential = from_value(signed_vc).map_err(|e| {
+        JsError::new(&format!(
+            "Failed to deserialize signed verifiable credential: {}",
+            e
+        ))
+    })?;
+
+    let schema_value = serde_wasm_bindgen::from_value::<serde_json::Value>(schema)
+        .map_err(|_| JsError::new("Failed to deserialize schema"))?;
+    match vc.verify_with_schema_check(public_key, &schema_value) {
+        Ok(_) => Ok(true),
+        Err(_e) => Ok(false),
+    }
+}
 
 #[wasm_bindgen]
 pub struct KeyPair {
