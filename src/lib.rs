@@ -147,9 +147,9 @@ pub struct Status {
 /// <https://www.w3.org/TR/vc-data-model-2.0/#data-schemas>
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct CredentialSchema {
-    id: Url,
+    pub id: Url,
     #[serde(rename = "type")]
-    schema_type: String,
+    pub schema_type: String,
 }
 
 /// <https://www.w3.org/TR/vc-data-integrity/#proofs>
