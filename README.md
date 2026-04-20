@@ -132,7 +132,12 @@ verifiable-credential-toolkit = { git = "https://github.com/nqminds/verifiable-c
 
 ### As a WASM/JavaScript package
 
-You need the `wasm32-unknown-unknown` Rust target and the `wasm-bindgen-cli` tool:
+You need the `wasm32-unknown-unknown` Rust target and the [`wasm-bindgen-cli`](https://github.com/wasm-bindgen/wasm-bindgen#----guide-main-branch----------api-docs----------contributing----------chat--) tool:
+
+Currently the bindgen format is unstable enough that these two schema versions must exactly match. You can accomplish this by either updating this binary or the wasm-bindgen dependency in the Rust project.
+
+You can install a particular the binary with:
+`cargo install -f wasm-bindgen-cli --version <your version number here>`
 
 ```bash
 # Install the WASM compilation target (one-time setup)
