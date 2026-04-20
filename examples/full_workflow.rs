@@ -48,7 +48,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Step 3: Sign the credential ─────────────────────────────────────
     println!("=== Step 3: Sign the credential ===\n");
-    let signed_vc: VerifiableCredential = unsigned_vc.sign(&private_key)?;
+    let signed_vc: VerifiableCredential = unsigned_vc.sign(private_key)?;
     println!("Proof type: {}", signed_vc.proof.proof_type);
     println!("Proof purpose: {}", signed_vc.proof.proof_purpose);
     println!(

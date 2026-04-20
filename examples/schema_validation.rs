@@ -52,7 +52,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }"#,
     )?;
 
-    match valid_vc.sign_with_schema_check(&private_key, &schema) {
+    match valid_vc.sign_with_schema_check(private_key, &schema) {
         Ok(signed) => {
             println!("✓ Signing succeeded (credential subject matches schema)");
 
@@ -78,7 +78,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }"#,
     )?;
 
-    match invalid_vc.sign_with_schema_check(&private_key, &schema) {
+    match invalid_vc.sign_with_schema_check(private_key, &schema) {
         Ok(_) => println!("✗ Signing succeeded unexpectedly"),
         Err(e) => println!("✓ Signing correctly rejected: {}\n", e),
     }
@@ -97,7 +97,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }"#,
     )?;
 
-    match wrong_type_vc.sign_with_schema_check(&private_key, &schema) {
+    match wrong_type_vc.sign_with_schema_check(private_key, &schema) {
         Ok(_) => println!("✗ Signing succeeded unexpectedly"),
         Err(e) => println!("✓ Signing correctly rejected: {}\n", e),
     }
