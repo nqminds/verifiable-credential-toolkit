@@ -364,22 +364,49 @@ let vp_json = serde_json::to_string_pretty(&vp).unwrap();
 
 The toolkit includes two CLI tools for quick operations without writing code.
 
-#### Generate Keys
+#### `vc_signer` (cargo default-run)
 
-```bash
-# Generate a keypair in the current directory
-cargo run --bin generate_keys
+```
+A CLI tool for signing Verifiable Credentials
 
-# Generate a keypair in a specific directory
-cargo run --bin generate_keys -- --output ./keys/
+Usage: vc_signer <COMMAND>
+
+Commands:
+  sign    Sign a verifiable credential
+  verify  Verify a verifiable credential
+  help    Print this message or the help of the given subcommand(s)
+
+Options:
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
-This creates two raw binary files:
+```
+Sign a verifiable credential
 
-- `{timestamp}.priv` — 32-byte Ed25519 private key
-- `{timestamp}.pub` — 32-byte Ed25519 public key
+Usage: vc_signer sign [OPTIONS] --input-vc <INPUT_VC> --key <KEY>
 
-#### Sign a Credential
+Options:
+  -i, --input-vc <INPUT_VC>      Path to the unsigned VC JSON file
+  -k, --key <KEY>                Path to the private key file
+  -o, --output-vc <OUTPUT_VC>    Path to save the signed VC [default: signed_output.json]
+  -s, --schema <SCHEMA>          Optional schema file path for validation
+  -u, --schema-url <SCHEMA_URL>  Optional schema URL for validation
+  -h, --help                     Print help
+```
+
+```
+Verify a verifiable credential
+
+Usage: vc_signer verify --input-vc <INPUT_VC> --key <KEY>
+
+Options:
+  -i, --input-vc <INPUT_VC>  Path to the signed VC JSON file
+  -k, --key <KEY>            Path to the public key file
+  -h, --help                 Print help
+```
+
+**Examples:**
 
 ```bash
 # Basic signing
@@ -399,15 +426,40 @@ cargo run --bin vc_signer -- sign \
   --input-vc unsigned_credential.json \
   --key keys/issuer.priv \
   --schema-url https://example.com/schemas/device.json
-```
 
-#### Verify a Credential
-
-```bash
+# Verify a signed credential
 cargo run --bin vc_signer -- verify \
   --input-vc signed_credential.json \
   --key keys/issuer.pub
 ```
+
+#### `generate_keys`
+
+```
+Generates Ed25519 key pairs
+
+Usage: generate_keys [OPTIONS]
+
+Options:
+  -o, --output <OUTPUT>  Output directory for the keys [default: .]
+  -h, --help             Print help
+  -V, --version          Print version
+```
+
+**Examples:**
+
+```bash
+# Generate a keypair in the current directory
+cargo run --bin generate_keys
+
+# Generate a keypair in a specific directory
+cargo run --bin generate_keys -- --output ./keys/
+```
+
+This creates two raw binary files:
+
+- `{timestamp}.priv` — 32-byte Ed25519 private key
+- `{timestamp}.pub` — 32-byte Ed25519 public key
 
 ---
 
