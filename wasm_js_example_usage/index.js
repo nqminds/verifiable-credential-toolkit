@@ -1,49 +1,64 @@
-// index.js
-import init, { sign, verify } from "./pkg/verifiable_credential_toolkit.js";
+// Browser example: Sign and verify a Verifiable Credential using WASM
+//
+// Prerequisites:
+//   1. cargo build --target wasm32-unknown-unknown --release
+//   2. wasm-bindgen --target web --out-dir wasm_js_example_usage/pkg target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm
+//   3. cd wasm_js_example_usage && python3 -m http.server 8080
+//   4. Open http://localhost:8080 in your browser
+
+import init, { sign, verify, generate_keypair } from "./pkg/verifiable_credential_toolkit.js";
 
 async function run() {
-  // Initialize the WASM module
+  // Initialise the WASM module (required once before calling any functions)
   await init();
 
-  // Example Unsigned Verifiable Credential (VC)
-  const unsignedVC = {
-    "@context": ["https://www.w3.org/2018/credentials/v1"],
-    "id": "http://example.com/credentials/3732",
-    "type": ["VerifiableCredential"],
-    "issuer": "https://example.com/issuers/14",
-    "credentialSubject": { "id": "did:example:abcdef" }
+  const output = document.getElementById("output");
+  const log = (msg) => {
+    console.log(msg);
+    output.innerHTML += `<pre>${typeof msg === "string" ? msg : JSON.stringify(msg, null, 2)}</pre>`;
   };
 
-  // Dummy private key (32 bytes) for testing.
-  // In a real scenario, use a proper cryptographic seed.
-  const privateKeyArray = new Uint8Array([
-    249,  36, 149, 249, 249, 117, 133,
-    209, 234, 131, 132, 144,  15, 129,
-    114, 114, 244, 234, 241, 239, 198,
-     73,  72, 185, 156, 200, 237, 170,
-      2, 142,  41,  36
-  ]);
+  // ── Step 1: Generate an Ed25519 keypair ──────────────────────────────
+  log("Step 1: Generating Ed25519 keypair…");
+  const keypair = generate_keypair();
+  log(`  Private key: ${keypair.signing_key().length} bytes`);
+  log(`  Public key:  ${keypair.verifying_key().length} bytes`);
 
-  // Dummy public key (32 bytes) for testing.
-  // This should correspond to the private key (if generated properly).
-  const publicKeyArray = new Uint8Array([
-    158, 252,  71, 183,  71,  40,  45, 125,
-    208, 153, 210, 175, 216, 211,  29,  93,
-     55,  89, 128, 135, 108, 220, 209, 142,
-    148,  55,  66,  57, 157, 249,   8, 204
-  ]);
-
+  // ── Step 2: Define an unsigned Verifiable Credential ─────────────────
+  log("\nStep 2: Creating unsigned Verifiable Credential…");
+  const unsignedVC = {
+    "@context": ["https://www.w3.org/ns/credentials/v2"],
+    id: "urn:uuid:a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    type: ["VerifiableCredential", "DeviceCertificate"],
+    issuer: "https://example.com/issuers/sensor-manufacturer",
+    credentialSubject: {
+      id: "urn:uuid:sensor-001",
+      name: "Temperature Sensor Alpha",
+      model: "TS-3000",
+    },
+  };
+  log(unsignedVC);
 
   try {
-    // Sign the unsigned VC
-    const signedVC = sign(unsignedVC, privateKeyArray);
-    console.log("Signed VC:", signedVC);
+    // ── Step 3: Sign the credential ────────────────────────────────────
+    log("\nStep 3: Signing…");
+    const signedVC = sign(unsignedVC, keypair.signing_key());
+    log(signedVC);
 
-    // Verify the signed VC
-    const verificationResult = verify(signedVC, publicKeyArray);
-    console.log("Verification result:", verificationResult);
+    // ── Step 4: Verify the credential ──────────────────────────────────
+    log("\nStep 4: Verifying…");
+    const isValid = verify(signedVC, keypair.verifying_key());
+    log(`<span class="status ${isValid ? "ok" : "fail"}">Verification result: ${isValid}</span>`);
+
+    // ── Step 5: Demonstrate tamper detection ────────────────────────────
+    log("\nStep 5: Tamper detection — modifying the credential and re-verifying…");
+    const tamperedVC = JSON.parse(JSON.stringify(signedVC));
+    tamperedVC.credentialSubject.name = "TAMPERED NAME";
+    const isTamperedValid = verify(tamperedVC, keypair.verifying_key());
+    log(`<span class="status ${!isTamperedValid ? "ok" : "fail"}">Tampered credential valid: ${isTamperedValid} (expected: false)</span>`);
   } catch (err) {
-    console.error("Error during signing or verifying:", err);
+    log(`Error: ${err.message}`);
+    console.error(err);
   }
 }
 

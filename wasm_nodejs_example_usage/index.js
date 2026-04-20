@@ -1,73 +1,96 @@
-// index.js
+// Node.js example: Sign and verify a Verifiable Credential with schema validation
+//
+// Prerequisites:
+//   1. cargo build --target wasm32-unknown-unknown --release
+//   2. wasm-bindgen --target nodejs --out-dir wasm_nodejs_example_usage/pkg target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm
+//   3. Run: node index.js
+
 import {
   sign,
   verify,
   verify_with_schema_check,
+  generate_keypair,
 } from "./pkg/verifiable_credential_toolkit.js";
 
 async function run() {
-  // Example Unsigned Verifiable Credential (VC)
+  // ── Step 1: Generate an Ed25519 keypair ──────────────────────────────
+  console.log("=== Step 1: Generate keypair ===\n");
+  const keypair = generate_keypair();
+  console.log(`  Private key: ${keypair.signing_key().length} bytes`);
+  console.log(`  Public key:  ${keypair.verifying_key().length} bytes\n`);
+
+  // ── Step 2: Define a credential ──────────────────────────────────────
+  console.log("=== Step 2: Create unsigned Verifiable Credential ===\n");
   const unsignedVC = {
     "@context": ["https://www.w3.org/ns/credentials/v2"],
     id: "urn:uuid:9a3e3c0e-2db0-412a-95c7-cf5520ba78df",
-    type: ["VerifiableCredential", "ExampleVerifiableCredential"],
-    issuer: "https://www.example.com/",
-    validFrom: "2024-08-22T13:53:32.295644150Z",
+    type: ["VerifiableCredential", "DeviceCertificate"],
+    issuer: "https://example.com/issuers/device-manufacturer",
+    validFrom: "2024-01-01T00:00:00Z",
     credentialSchema: {
-      id: "https://www.example.com/foo.json",
+      id: "https://example.com/schemas/device.json",
       type: "JsonSchema",
     },
     credentialSubject: {
-      name: "HenryTrustPhone",
-      id: "HenryTrustPhone-id",
+      id: "urn:uuid:device-001",
+      name: "Temperature Sensor A",
     },
   };
+  console.log(JSON.stringify(unsignedVC, null, 2), "\n");
 
+  // ── Step 3: Sign the credential ──────────────────────────────────────
+  console.log("=== Step 3: Sign the credential ===\n");
+  const signedVC = sign(unsignedVC, keypair.signing_key());
+  console.log("Signed VC:", JSON.stringify(signedVC, null, 2), "\n");
+
+  // ── Step 4: Verify (signature only) ──────────────────────────────────
+  console.log("=== Step 4: Verify signature ===\n");
+  const isValid = verify(signedVC, keypair.verifying_key());
+  console.log(`  Signature valid: ${isValid}\n`);
+
+  // ── Step 5: Verify with JSON Schema validation ───────────────────────
+  // The schema defines what fields the credentialSubject must contain.
+  // This is useful when multiple parties agree on a data format.
+  console.log("=== Step 5: Verify with schema ===\n");
   const schema = {
-    description: "A device",
-    properties: {
-      id: {
-        description: "id of the device",
-        type: "string",
-      },
-      name: {
-        description: "user friendly name of the device",
-        type: "string",
-      },
-    },
-    required: ["id"],
-    title: "device",
+    title: "Device",
+    description: "Schema for a device credential subject",
     type: "object",
+    properties: {
+      id: { type: "string", description: "Unique device identifier" },
+      name: { type: "string", description: "Human-readable device name" },
+    },
+    required: ["id", "name"],
+  };
+  console.log("Schema:", JSON.stringify(schema, null, 2));
+
+  const isValidWithSchema = verify_with_schema_check(
+    signedVC,
+    keypair.verifying_key(),
+    schema,
+  );
+  console.log(`  Valid with schema: ${isValidWithSchema}\n`);
+
+  // ── Step 6: Demonstrate schema rejection ─────────────────────────────
+  console.log("=== Step 6: Schema rejection (stricter schema) ===\n");
+  const stricterSchema = {
+    type: "object",
+    properties: {
+      id: { type: "string" },
+      name: { type: "string" },
+      model: { type: "string" },
+    },
+    required: ["id", "name", "model"], // "model" is missing from the credential
   };
 
-  // Dummy private key (32 bytes) for testing.
-  const privateKeyArray = new Uint8Array([
-    249, 36, 149, 249, 249, 117, 133, 209, 234, 131, 132, 144, 15, 129, 114,
-    114, 244, 234, 241, 239, 198, 73, 72, 185, 156, 200, 237, 170, 2, 142, 41,
-    36,
-  ]);
+  const isValidStrict = verify_with_schema_check(
+    signedVC,
+    keypair.verifying_key(),
+    stricterSchema,
+  );
+  console.log(`  Valid with stricter schema: ${isValidStrict} (expected: false)\n`);
 
-  // Dummy public key (32 bytes) for testing.
-  const publicKeyArray = new Uint8Array([
-    158, 252, 71, 183, 71, 40, 45, 125, 208, 153, 210, 175, 216, 211, 29, 93,
-    55, 89, 128, 135, 108, 220, 209, 142, 148, 55, 66, 57, 157, 249, 8, 204,
-  ]);
-
-  try {
-    // Sign the unsigned VC
-    const signedVC = sign(unsignedVC, privateKeyArray);
-    console.log("Signed VC:", signedVC);
-
-    // Verify the signed VC
-    const verificationResult = verify_with_schema_check(
-      signedVC,
-      publicKeyArray,
-      schema
-    );
-    console.log("Verification result:", verificationResult);
-  } catch (err) {
-    console.error("Error during signing or verifying:", err);
-  }
+  console.log("=== Done! ===");
 }
 
-run();
+run().catch(console.error);

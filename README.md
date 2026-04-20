@@ -1,10 +1,375 @@
 # Verifiable Credential Toolkit
 
-Tools and Library for Verifiable Credential creation and signing.
+A Rust library (with WASM/JavaScript bindings) for creating, signing, and verifying [W3C Verifiable Credentials](https://www.w3.org/TR/vc-data-model-2.0/). It uses Ed25519 digital signatures to ensure credentials are tamper-proof and can be independently verified.
 
-# CLI Tools
+## Table of Contents
 
-## `vc_signer` (cargo default-run)
+- [What Are Verifiable Credentials?](#what-are-verifiable-credentials)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [Core Concepts](#core-concepts)
+- [Usage](#usage)
+  - [Rust Library](#rust-library)
+  - [Command-Line Tools](#command-line-tools)
+  - [JavaScript / TypeScript (WASM)](#javascript--typescript-wasm)
+- [API Reference](#api-reference)
+- [JSON Schema Validation](#json-schema-validation)
+- [Examples](#examples)
+- [Verifiable Presentations](#verifiable-presentations)
+- [Security Considerations](#security-considerations)
+
+---
+
+## What Are Verifiable Credentials?
+
+Verifiable Credentials (VCs) are a W3C standard for expressing credentials (e.g. identity documents, certificates, attestations about devices or people) in a way that is:
+
+- **Tamper-evident** — any modification to the credential after signing is detectable.
+- **Machine-readable** — credentials are structured JSON that software can parse and validate.
+- **Decentralised** — no central authority is needed to verify a credential; anyone with the issuer's public key can check it.
+
+A typical VC workflow looks like this:
+
+```
+┌──────────┐         ┌──────────┐         ┌──────────┐
+│  Issuer  │         │  Holder  │         │ Verifier │
+│          │         │          │         │          │
+│ Creates  │ Signed  │ Stores & │ Presents│ Checks   │
+│ & signs  ├────────►│ carries  ├────────►│ signature│
+│ the VC   │   VC    │ the VC   │   VC    │ & data   │
+└──────────┘         └──────────┘         └──────────┘
+```
+
+1. An **Issuer** (e.g. a device manufacturer, certificate authority) creates a credential containing claims (e.g. "this device has ID X and model Y") and signs it with their private key.
+2. A **Holder** (e.g. the device owner) receives and stores the signed credential.
+3. A **Verifier** (e.g. a system accepting the device onto a network) checks the signature using the issuer's public key. If valid, the claims are trustworthy.
+
+This toolkit handles steps 1 and 3 — signing credentials and verifying them.
+
+---
+
+## Quick Start
+
+### Rust
+
+```rust
+use verifiable_credential_toolkit::{
+    UnsignedVerifiableCredential, generate_keypair,
+};
+
+// 1. Generate an Ed25519 keypair
+let (private_key, public_key) = generate_keypair();
+
+// 2. Define a credential as JSON
+let vc_json = r#"{
+    "@context": ["https://www.w3.org/ns/credentials/v2"],
+    "type": ["VerifiableCredential"],
+    "issuer": "https://example.com/issuers/sensor-manufacturer",
+    "credentialSubject": {
+        "id": "urn:uuid:device-001",
+        "name": "Temperature Sensor A"
+    }
+}"#;
+
+// 3. Parse and sign
+let unsigned_vc: UnsignedVerifiableCredential =
+    serde_json::from_str(vc_json).expect("Invalid VC JSON");
+let signed_vc = unsigned_vc.sign(&private_key).expect("Signing failed");
+
+// 4. Verify
+signed_vc.verify(&public_key).expect("Verification failed");
+println!("Credential verified successfully!");
+```
+
+### JavaScript (Node.js)
+
+```js
+import {
+  sign,
+  verify,
+  generate_keypair,
+} from "./pkg/verifiable_credential_toolkit.js";
+
+// 1. Generate keys
+const keypair = generate_keypair();
+
+// 2. Create an unsigned credential
+const unsignedVC = {
+  "@context": ["https://www.w3.org/ns/credentials/v2"],
+  type: ["VerifiableCredential"],
+  issuer: "https://example.com/issuers/sensor-manufacturer",
+  credentialSubject: {
+    id: "urn:uuid:device-001",
+    name: "Temperature Sensor A",
+  },
+};
+
+// 3. Sign and verify
+const signedVC = sign(unsignedVC, keypair.signing_key());
+const isValid = verify(signedVC, keypair.verifying_key());
+console.log("Valid:", isValid); // true
+```
+
+---
+
+## Installation
+
+### As a Rust dependency
+
+Add to your `Cargo.toml`:
+
+```toml
+[dependencies]
+verifiable-credential-toolkit = "0.5"
+```
+
+Or install directly from GitHub:
+
+```toml
+[dependencies]
+verifiable-credential-toolkit = { git = "https://github.com/nqminds/verifiable-credential-toolkit" }
+```
+
+### As a WASM/JavaScript package
+
+You need the `wasm32-unknown-unknown` Rust target and the [`wasm-bindgen-cli`](https://github.com/wasm-bindgen/wasm-bindgen#----guide-main-branch----------api-docs----------contributing----------chat--) tool:
+
+Currently the bindgen format is unstable enough that these two schema versions must exactly match. You can accomplish this by either updating this binary or the wasm-bindgen dependency in the Rust project.
+
+You can install a particular the binary with:
+`cargo install -f wasm-bindgen-cli --version <your version number here>`
+
+```bash
+# Install the WASM compilation target (one-time setup)
+rustup target add wasm32-unknown-unknown
+
+# Install wasm-bindgen-cli (version must match the wasm-bindgen dependency in Cargo.toml)
+cargo install wasm-bindgen-cli --version 0.2.100
+```
+
+Then build:
+
+```bash
+# Compile to WASM
+cargo build --target wasm32-unknown-unknown --release
+
+# Generate JS/TS bindings for browser usage
+wasm-bindgen --target web --out-dir pkg \
+  target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm
+
+# Or for Node.js usage
+wasm-bindgen --target nodejs --out-dir pkg \
+  target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm
+```
+
+This generates a `pkg/` directory containing the compiled WASM module and JavaScript/TypeScript bindings that you can import directly.
+
+### CLI tools
+
+```bash
+# Install both CLI tools
+cargo install --path .
+
+# Or run directly
+cargo run --bin generate_keys
+cargo run --bin vc_signer
+```
+
+---
+
+## Core Concepts
+
+### Credential Structure
+
+A Verifiable Credential is a JSON object with this structure:
+
+```jsonc
+{
+  // Required: JSON-LD context URLs defining the vocabulary
+  "@context": ["https://www.w3.org/ns/credentials/v2"],
+
+  // Optional: unique identifier for this credential
+  "id": "urn:uuid:9a3e3c0e-2db0-412a-95c7-cf5520ba78df",
+
+  // Required: credential type(s) — must include "VerifiableCredential"
+  "type": ["VerifiableCredential", "DeviceCertificate"],
+
+  // Required: who issued this credential (URL or object with "id")
+  "issuer": "https://example.com/issuers/device-manufacturer",
+
+  // Required: the actual claims being made
+  "credentialSubject": {
+    "id": "urn:uuid:device-001",
+    "name": "Temperature Sensor A",
+    "model": "TS-3000",
+  },
+
+  // Optional: when this credential becomes valid (ISO 8601)
+  "validFrom": "2024-01-01T00:00:00Z",
+
+  // Optional: when this credential expires (ISO 8601)
+  "validUntil": "2030-01-01T00:00:00Z",
+
+  // Optional: JSON Schema reference for validating credentialSubject
+  "credentialSchema": {
+    "id": "https://example.com/schemas/device.json",
+    "type": "JsonSchema",
+  },
+
+  // Added by signing — the cryptographic proof
+  "proof": {
+    "type": "Ed25519Signature2018",
+    "proofPurpose": "assertionMethod",
+    "proofValue": "base64-encoded-signature...",
+  },
+}
+```
+
+### Ed25519 Keys
+
+This toolkit uses **Ed25519**, a fast and widely-supported digital signature algorithm. Keys are compact (32 bytes each) and signatures are 64 bytes.
+
+- **Private key** (signing key): 32 bytes. Keep this secret. Used by the issuer to sign credentials.
+- **Public key** (verifying key): 32 bytes. Share this freely. Used by anyone to verify a credential's authenticity.
+
+Keys are stored as raw binary files (not PEM/DER). The CLI tools generate files named `{timestamp}.priv` and `{timestamp}.pub`.
+
+---
+
+## Usage
+
+### Rust Library
+
+#### Generate a Keypair
+
+```rust
+use verifiable_credential_toolkit::generate_keypair;
+
+let (private_key, public_key) = generate_keypair();
+// private_key: [u8; 32] — keep secret
+// public_key:  [u8; 32] — distribute to verifiers
+
+// Save to files
+std::fs::write("issuer.priv", private_key).unwrap();
+std::fs::write("issuer.pub", public_key).unwrap();
+```
+
+#### Sign a Credential
+
+```rust
+use verifiable_credential_toolkit::UnsignedVerifiableCredential;
+
+// Load credential from JSON (from a file, API response, etc.)
+let vc_json = std::fs::read_to_string("credential.json").unwrap();
+let unsigned_vc: UnsignedVerifiableCredential =
+    serde_json::from_str(&vc_json).expect("Invalid VC JSON");
+
+// Load private key
+let private_key = std::fs::read("issuer.priv").unwrap();
+
+// Sign — produces a VerifiableCredential with a proof attached
+let signed_vc = unsigned_vc.sign(&private_key).expect("Signing failed");
+
+// Serialise and save
+let output = serde_json::to_string_pretty(&signed_vc).unwrap();
+std::fs::write("credential_signed.json", output).unwrap();
+```
+
+#### Verify a Credential
+
+```rust
+use verifiable_credential_toolkit::VerifiableCredential;
+
+// Load the signed credential
+let vc_json = std::fs::read_to_string("credential_signed.json").unwrap();
+let signed_vc: VerifiableCredential =
+    serde_json::from_str(&vc_json).expect("Invalid signed VC");
+
+// Load the issuer's public key
+let public_key = std::fs::read("issuer.pub").unwrap();
+
+// Verify — checks signature AND validity period (validFrom/validUntil)
+match signed_vc.verify(&public_key) {
+    Ok(()) => println!("Credential is valid and untampered"),
+    Err(e) => eprintln!("Verification failed: {}", e),
+}
+```
+
+#### Sign with JSON Schema Validation
+
+You can validate the `credentialSubject` against a JSON Schema before signing, ensuring the data conforms to an agreed-upon structure:
+
+```rust
+use verifiable_credential_toolkit::UnsignedVerifiableCredential;
+
+let unsigned_vc: UnsignedVerifiableCredential =
+    serde_json::from_str(&std::fs::read_to_string("credential.json").unwrap()).unwrap();
+let private_key = std::fs::read("issuer.priv").unwrap();
+
+// Load the schema
+let schema: serde_json::Value =
+    serde_json::from_str(&std::fs::read_to_string("device_schema.json").unwrap()).unwrap();
+
+// Sign with schema validation — fails if credentialSubject doesn't match the schema
+let signed_vc = unsigned_vc
+    .sign_with_schema_check(&private_key, &schema)
+    .expect("Schema validation or signing failed");
+```
+
+You can also fetch a schema from a URL at signing time (native Rust only, not available in WASM):
+
+```rust
+let signed_vc = unsigned_vc
+    .sign_with_schema_check_from_url(&private_key, "https://example.com/schemas/device.json")
+    .expect("Failed to fetch schema or sign");
+```
+
+#### Customise the Proof
+
+After signing, you can add metadata to the proof using either the builder pattern or direct field access:
+
+```rust
+use chrono::{Duration, Utc};
+use url::Url;
+
+let mut signed_vc = unsigned_vc.sign(&private_key).unwrap();
+
+// Builder pattern
+signed_vc.proof = signed_vc.proof
+    .set_verification_method("did:example:issuer#key-1".to_string())
+    .set_crypto_suite("eddsa-rdfc-2022".to_string())
+    .set_created(Utc::now())
+    .set_expires(Utc::now() + Duration::days(365))
+    .set_domain(vec!["https://example.com".to_string()])
+    .set_nonce(vec!["abc123".to_string()]);
+```
+
+#### Build a Verifiable Presentation
+
+A Verifiable Presentation bundles one or more signed credentials together, for example when a holder wants to present multiple credentials to a verifier at once:
+
+```rust
+use verifiable_credential_toolkit::{VerifiableCredential, VerifiablePresentation};
+use url::Url;
+
+let vp = VerifiablePresentation {
+    context: vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
+    id: Some(Url::parse("urn:uuid:3978344f-8596-4c3a-a978-8fcaba3903c5").unwrap()),
+    presentation_type: vec!["VerifiablePresentation".to_string()],
+    verifiable_credential: Some(vec![signed_vc]),
+    holder: None,
+};
+
+let vp_json = serde_json::to_string_pretty(&vp).unwrap();
+```
+
+---
+
+### Command-Line Tools
+
+The toolkit includes two CLI tools for quick operations without writing code.
+
+#### `vc_signer` (cargo default-run)
 
 ```
 A CLI tool for signing Verifiable Credentials
@@ -12,8 +377,9 @@ A CLI tool for signing Verifiable Credentials
 Usage: vc_signer <COMMAND>
 
 Commands:
-  sign  Sign a verifiable credential
-  help  Print this message or the help of the given subcommand(s)
+  sign    Sign a verifiable credential
+  verify  Verify a verifiable credential
+  help    Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
@@ -34,7 +400,45 @@ Options:
   -h, --help                     Print help
 ```
 
-## `generate_keys`
+```
+Verify a verifiable credential
+
+Usage: vc_signer verify --input-vc <INPUT_VC> --key <KEY>
+
+Options:
+  -i, --input-vc <INPUT_VC>  Path to the signed VC JSON file
+  -k, --key <KEY>            Path to the public key file
+  -h, --help                 Print help
+```
+
+**Examples:**
+
+```bash
+# Basic signing
+cargo run --bin vc_signer -- sign \
+  --input-vc unsigned_credential.json \
+  --key keys/issuer.priv \
+  --output-vc signed_credential.json
+
+# Sign with local schema validation
+cargo run --bin vc_signer -- sign \
+  --input-vc unsigned_credential.json \
+  --key keys/issuer.priv \
+  --schema schemas/device.json
+
+# Sign with remote schema validation
+cargo run --bin vc_signer -- sign \
+  --input-vc unsigned_credential.json \
+  --key keys/issuer.priv \
+  --schema-url https://example.com/schemas/device.json
+
+# Verify a signed credential
+cargo run --bin vc_signer -- verify \
+  --input-vc signed_credential.json \
+  --key keys/issuer.pub
+```
+
+#### `generate_keys`
 
 ```
 Generates Ed25519 key pairs
@@ -47,83 +451,326 @@ Options:
   -V, --version          Print version
 ```
 
-# WASM Compilation and Usage in Client-side Javascript in the browser
-
-You can compile the sign and verify functions for web based WASM like so:
+**Examples:**
 
 ```bash
-wasm-pack build --target web
+# Generate a keypair in the current directory
+cargo run --bin generate_keys
+
+# Generate a keypair in a specific directory
+cargo run --bin generate_keys -- --output ./keys/
 ```
 
-Tested with:
+This creates two raw binary files:
+
+- `{timestamp}.priv` — 32-byte Ed25519 private key
+- `{timestamp}.pub` — 32-byte Ed25519 public key
+
+---
+
+### JavaScript / TypeScript (WASM)
+
+The library compiles to WebAssembly for use in browsers and Node.js. TypeScript type definitions are included (see [verifiable_credential_toolkit.d.ts](./verifiable_credential_toolkit.d.ts)).
+
+#### Build the WASM Package
 
 ```bash
-wasm-pack --version
-wasm-pack 0.13.1
+# Compile to WASM (one command for both targets)
+cargo build --target wasm32-unknown-unknown --release
+
+# For browser usage (ES module with init() function)
+wasm-bindgen --target web --out-dir pkg \
+  target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm
+
+# For Node.js usage (CommonJS-compatible)
+wasm-bindgen --target nodejs --out-dir pkg \
+  target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm
 ```
 
-By default it will build in the `pkg` directory.
+#### Browser Example
 
-I have put an example usage of the WASM functionality in the browser inside the [./wasm_js_example_usage directory](./wasm_js_example_usage).
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>VC Toolkit Demo</title>
+  </head>
+  <body>
+    <h1>Verifiable Credential Demo</h1>
+    <pre id="output"></pre>
+    <script type="module">
+      import init, {
+        sign,
+        verify,
+        generate_keypair,
+      } from "./pkg/verifiable_credential_toolkit.js";
 
-If you compile it inside that directory in a directory called pkg like so:
+      async function run() {
+        // Initialise the WASM module (required for browser target)
+        await init();
 
+        // Generate a fresh keypair
+        const keypair = generate_keypair();
+
+        // Define a credential
+        const unsignedVC = {
+          "@context": ["https://www.w3.org/ns/credentials/v2"],
+          type: ["VerifiableCredential"],
+          issuer: "https://example.com/issuers/device-manufacturer",
+          credentialSubject: {
+            id: "urn:uuid:sensor-001",
+            name: "Temperature Sensor Alpha",
+          },
+        };
+
+        // Sign the credential
+        const signedVC = sign(unsignedVC, keypair.signing_key());
+
+        // Verify it
+        const isValid = verify(signedVC, keypair.verifying_key());
+
+        document.getElementById("output").textContent =
+          `Signed VC:\n${JSON.stringify(signedVC, null, 2)}\n\nValid: ${isValid}`;
+      }
+
+      run().catch(console.error);
+    </script>
+  </body>
+</html>
 ```
-wasm-pack build --target web --out-dir wasm_js_example_usage/pkg
+
+#### Node.js Example
+
+```js
+import {
+  sign,
+  verify,
+  verify_with_schema_check,
+  generate_keypair,
+} from "./pkg/verifiable_credential_toolkit.js";
+
+// Generate keys (or load existing ones)
+const keypair = generate_keypair();
+
+// Create a credential
+const unsignedVC = {
+  "@context": ["https://www.w3.org/ns/credentials/v2"],
+  id: "urn:uuid:9a3e3c0e-2db0-412a-95c7-cf5520ba78df",
+  type: ["VerifiableCredential", "DeviceCertificate"],
+  issuer: "https://example.com/issuers/device-manufacturer",
+  validFrom: "2024-01-01T00:00:00Z",
+  credentialSchema: {
+    id: "https://example.com/schemas/device.json",
+    type: "JsonSchema",
+  },
+  credentialSubject: {
+    id: "urn:uuid:device-001",
+    name: "Temperature Sensor A",
+  },
+};
+
+// Sign
+const signedVC = sign(unsignedVC, keypair.signing_key());
+console.log("Signed VC:", JSON.stringify(signedVC, null, 2));
+
+// Verify (signature + validity period)
+const isValid = verify(signedVC, keypair.verifying_key());
+console.log("Signature valid:", isValid);
+
+// Verify with schema validation
+const schema = {
+  type: "object",
+  properties: {
+    id: { type: "string" },
+    name: { type: "string" },
+  },
+  required: ["id", "name"],
+};
+
+const isValidWithSchema = verify_with_schema_check(
+  signedVC,
+  keypair.verifying_key(),
+  schema,
+);
+console.log("Valid with schema:", isValidWithSchema);
 ```
 
-Then run the web server at localhost 8080 with:
+#### TypeScript Types
+
+The package ships with a `.d.ts` file. Key exports:
+
+```typescript
+// Key generation
+function generate_keypair(): KeyPair;
+
+// Signing and verification
+function sign(
+  unsigned_vc: UnsignedVerifiableCredential,
+  private_key: Uint8Array,
+): VerifiableCredential;
+function verify(
+  signed_vc: VerifiableCredential,
+  public_key: Uint8Array,
+): boolean;
+function verify_with_schema_check(
+  signed_vc: VerifiableCredential,
+  public_key: Uint8Array,
+  schema: any,
+): boolean;
+
+// KeyPair class
+class KeyPair {
+  signing_key(): Uint8Array; // 32-byte private key
+  verifying_key(): Uint8Array; // 32-byte public key
+}
+```
+
+---
+
+## API Reference
+
+### Rust API
+
+| Function / Method                                                                                                | Description                                                                 |
+| ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `generate_keypair() → ([u8; 32], [u8; 32])`                                                                      | Generate a new Ed25519 keypair (private, public)                            |
+| `UnsignedVerifiableCredential::sign(private_key) → Result<VerifiableCredential>`                                 | Sign a credential                                                           |
+| `UnsignedVerifiableCredential::sign_with_schema_check(private_key, schema) → Result<VerifiableCredential>`       | Validate `credentialSubject` against a JSON Schema, then sign               |
+| `UnsignedVerifiableCredential::sign_with_schema_check_from_url(private_key, url) → Result<VerifiableCredential>` | Fetch a JSON Schema from a URL, validate, then sign (not available in WASM) |
+| `VerifiableCredential::verify(public_key) → Result<()>`                                                          | Verify signature and check validity period                                  |
+| `VerifiableCredential::verify_with_schema_check(public_key, schema) → Result<()>`                                | Verify signature, check validity, and validate against schema               |
+| `VerifiableCredential::to_unsigned() → UnsignedVerifiableCredential`                                             | Strip the proof to get back an unsigned credential                          |
+
+### WASM/JavaScript API
+
+| Function                                                          | Description                                                              |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `generate_keypair() → KeyPair`                                    | Generate a new Ed25519 keypair                                           |
+| `sign(unsignedVC, privateKey) → VerifiableCredential`             | Sign a credential (throws on error)                                      |
+| `verify(signedVC, publicKey) → boolean`                           | Verify a signed credential                                               |
+| `verify_with_schema_check(signedVC, publicKey, schema) → boolean` | Verify with JSON Schema validation                                       |
+| `normalize_object(input) → any`                                   | Remove `undefined`/`null` values from JS objects (useful before signing) |
+
+---
+
+## JSON Schema Validation
+
+You can enforce a structure on `credentialSubject` using [JSON Schema](https://json-schema.org/). This is useful when multiple parties agree on what fields a credential should contain.
+
+Example schema for a device credential:
+
+```json
+{
+  "title": "Device",
+  "description": "Schema for a device credential subject",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier for the device"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable device name"
+    },
+    "model": {
+      "type": "string",
+      "description": "Device model number"
+    }
+  },
+  "required": ["id", "name"]
+}
+```
+
+When you use `sign_with_schema_check` or `verify_with_schema_check`, the `credentialSubject` is validated against this schema. If it doesn't match the required structure, the operation returns an error.
+
+---
+
+## Examples
+
+Working examples are included in the repository:
+
+| Directory                                                    | Description                                          |
+| ------------------------------------------------------------ | ---------------------------------------------------- |
+| [`wasm_js_example_usage/`](./wasm_js_example_usage/)         | Browser-based signing and verification using WASM    |
+| [`wasm_nodejs_example_usage/`](./wasm_nodejs_example_usage/) | Node.js signing, verification, and schema validation |
+| [`examples/`](./examples/)                                   | Rust examples (run with `cargo run --example`)       |
+
+### Running the Browser Example
 
 ```bash
+# Build WASM and generate browser bindings
+cargo build --target wasm32-unknown-unknown --release
+wasm-bindgen --target web --out-dir wasm_js_example_usage/pkg \
+  target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm
+
+# Serve the example
+cd wasm_js_example_usage
 python3 -m http.server 8080
+# Open http://localhost:8080 in your browser and check the console
 ```
 
-When you load the page in a browser and open the console you should see the signed VC object being logged and the successful result of the verification. See screenshot below:
-
-![Screenshot showing example web page and console logs](./wasm_js_example_usage/screenshot.png)
-
-The load_keys.mjs Node.js script can be used to print a private and public key to the command line in a format which can be copied into the index.js file for testing/example usage purposes.
-
-# WASM Compilation and Usage in Node.js
-
-You can compile the sign and verify functions for nodejs based WASM like so:
-
-```
-wasm-pack build --target nodejs
-```
-
-I have put an example usage of the WASM functionality in a node script inside the [./wasm_nodejs_example_usage directory](./wasm_nodejs_example_usage).
-
-
-If you compile it inside that directory in a directory called pkg like so:
+### Running the Node.js Example
 
 ```bash
-wasm-pack build --target nodejs --out-dir wasm_nodejs_example_usage/pkg
-```
+# Build WASM and generate Node.js bindings
+cargo build --target wasm32-unknown-unknown --release
+wasm-bindgen --target nodejs --out-dir wasm_nodejs_example_usage/pkg \
+  target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm
 
-Then run the node script like so:
-
-```bash
+# Run the example
+cd wasm_nodejs_example_usage
 node index.js
 ```
 
-It should log your VC to the console and the result of verification like so:
+### Running the Rust Examples
 
 ```bash
-Signed VC: Map(6) {
-'@context' => [ 'https://www.w3.org/2018/credentials/v1' ],
-'id' => 'http://example.com/credentials/3732',
-'type' => 'VerifiableCredential',
-'issuer' => 'https://example.com/issuers/14',
-'credentialSubject' => Map(1) { 'id' => 'did:example:abcdef' },
-'proof' => {
-type: 'Ed25519Signature2018',
-proofPurpose: 'assertionMethod',
-verificationMethod: undefined,
-cryptosuite: 'eddsa-rdfc-2022',
-created: '2025-02-27T10:17:09.806Z',
-proofValue: 'ShO0cQNI3whBuwYNh2EDY3Mua/NLpu5n5QlC5vLQCv4aya5/vQI64avSZ2JcQOpUCf1SPQtzMDeurHNka8CmBA=='
- }
-}
-Verification result: true
+# End-to-end: generate keys, sign, verify, and inspect
+cargo run --example full_workflow
+
+# Signing with JSON Schema validation
+cargo run --example schema_validation
 ```
+
+---
+
+## Verifiable Presentations
+
+A **Verifiable Presentation** (VP) is a wrapper that bundles one or more Verifiable Credentials for transmission to a verifier. Use cases include:
+
+- A device presenting both a manufacturer certificate and a calibration certificate.
+- A user presenting identity and access credentials together.
+
+```json
+{
+  "@context": ["https://www.w3.org/ns/credentials/v2"],
+  "id": "urn:uuid:3978344f-8596-4c3a-a978-8fcaba3903c5",
+  "type": ["VerifiablePresentation"],
+  "verifiableCredential": [
+    {
+      /* signed VC 1 */
+    },
+    {
+      /* signed VC 2 */
+    }
+  ],
+  "holder": "did:example:holder-123"
+}
+```
+
+---
+
+## Security Considerations
+
+- **Protect private keys.** Anyone with access to a private key can forge credentials. Store them securely (e.g. hardware security modules, encrypted storage).
+- **Distribute public keys via trusted channels.** Verifiers must be confident a public key genuinely belongs to the claimed issuer.
+- **Set validity periods.** Use `validFrom` and `validUntil` to limit the window during which a credential is accepted.
+- **Use schema validation** when you need to enforce a specific data structure on credentials.
+- **Key rotation.** Periodically generate new keypairs and re-issue credentials as needed.
+
+---
+
+## License
+
+Apache-2.0 — see [Cargo.toml](./Cargo.toml) for details.

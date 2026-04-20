@@ -1,11 +1,39 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>WASM VC Toolkit Test</title>
-</head>
-<body>
-  <h1>WASM VC Toolkit Test</h1>
-  <script type="module" src="index.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <title>Verifiable Credential Toolkit — Browser Demo</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 800px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+      }
+      pre {
+        background: #f4f4f4;
+        padding: 1rem;
+        overflow-x: auto;
+        border-radius: 4px;
+      }
+      .status {
+        font-weight: bold;
+      }
+      .ok {
+        color: green;
+      }
+      .fail {
+        color: red;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Verifiable Credential Toolkit — Browser Demo</h1>
+    <p>
+      Open the browser console to see detailed output. Results are also shown
+      below.
+    </p>
+    <div id="output"><p>Loading WASM module…</p></div>
+    <script type="module" src="index.js"></script>
+  </body>
 </html>

@@ -3,8 +3,15 @@ use crate::VerifiableCredential;
 use ed25519_dalek::{SigningKey, VerifyingKey};
 use js_sys::{Array, Reflect};
 use rand::rngs::OsRng;
-use serde_wasm_bindgen::{from_value, to_value};
+use serde::Serialize;
+use serde_wasm_bindgen::from_value;
 use wasm_bindgen::prelude::*;
+
+/// Serialize a Rust value to a JsValue using plain JS objects (not Maps).
+fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, serde_wasm_bindgen::Error> {
+    let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
+    value.serialize(&serializer)
+}
 
 // Helper function to normalize a JS object by removing undefined values
 #[wasm_bindgen]
@@ -107,7 +114,7 @@ pub fn sign(unsigned_vc: JsValue, private_key: &[u8]) -> Result<JsValue, JsError
         .sign(private_key)
         .map_err(|e| JsError::new(&format!("Signing failed: {}", e)))?;
 
-    Ok(to_value(&signed)?)
+    Ok(to_js_value(&signed)?)
 }
 
 #[wasm_bindgen]
