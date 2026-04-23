@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package verifiable_credential_toolkit.v1;
+
+import "google/protobuf/struct.proto";
+
+
+
+message Proof {
+  string type = 1;
+  string created = 2;
+  string verification_method = 3 [json_name = "verificationMethod"];
+  string proof_purpose = 4 [json_name = "proofPurpose"];
+  string cryptosuite = 5;
+  string proof_value = 6 [json_name = "proofValue"];
+  string jws = 7;
+  string challenge = 8;
+  string domain = 9;
+
+  // preserve proof fields not explicitly modeled
+  map<string, google.protobuf.Value> extra = 99;
+}
+
+message ProofList {
+  repeated Proof items = 1;
+}
+
+message UnsignedVerifiableCredential {
+  repeated string context = 1 [json_name = "@context"];
+  string id = 2;
+  repeated string types = 3 [json_name = "type"];
+
+  google.protobuf.Value issuer = 4;
+
+  // use Value for max compatibility with current JSON behavior
+  google.protobuf.Value credential_subject = 5 [json_name = "credentialSubject"];
+  google.protobuf.Value credential_status = 6 [json_name = "credentialStatus"];
+
+  string valid_from = 7 [json_name = "validFrom"];
+  string valid_until = 8 [json_name = "validUntil"];
+
+  // optional compatibility with VC v1-style fields
+  string issuance_date = 9 [json_name = "issuanceDate"];
+  string expiration_date = 10 [json_name = "expirationDate"];
+
+  google.protobuf.Value credential_schema = 11 [json_name = "credentialSchema"];
+  repeated google.protobuf.Value evidence = 12;
+  google.protobuf.Value terms_of_use = 13 [json_name = "termsOfUse"];
+
+  // preserve any top-level VC fields not explicitly modeled
+  map<string, google.protobuf.Value> extra = 99;
+}
+
+message VerifiableCredential {
+  repeated string context = 1 [json_name = "@context"];
+  string id = 2;
+  repeated string types = 3 [json_name = "type"];
+
+  google.protobuf.Value issuer = 4;
+  google.protobuf.Value credential_subject = 5 [json_name = "credentialSubject"];
+  google.protobuf.Value credential_status = 6 [json_name = "credentialStatus"];
+
+  string valid_from = 7 [json_name = "validFrom"];
+  string valid_until = 8 [json_name = "validUntil"];
+
+  string issuance_date = 9 [json_name = "issuanceDate"];
+  string expiration_date = 10 [json_name = "expirationDate"];
+
+  google.protobuf.Value credential_schema = 11 [json_name = "credentialSchema"];
+  repeated google.protobuf.Value evidence = 12;
+  google.protobuf.Value terms_of_use = 13 [json_name = "termsOfUse"];
+
+  // support single-proof and multi-proof forms directly at the root
+  // (Alternatively, you could use a google.protobuf.Value proof = 20; if JSON structure is highly dynamic)
+  oneof proof_kind {
+    Proof proof = 14;
+    ProofList proofs = 15;
+  }
+
+  // preserve any top-level VC fields not explicitly modeled
+  map<string, google.protobuf.Value> extra = 16;
+}

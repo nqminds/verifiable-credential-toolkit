@@ -20,13 +20,15 @@ chrono = { version = "0.4.39", features = ["serde"] }
 serde_with = "3.12.0"
 ed25519-dalek = { version = "2.1.1", features = ["serde", "rand_core"] }
 base64 = "0.22.1"
-jsonschema = {version = "0.28.3", default-features = false}
+jsonschema = { version = "0.28.3", default-features = false }
 reqwest = { version = "0.12.12", features = ["blocking"] }
 url = { version = "2.5.4", features = ["serde"] }
 clap = { version = "4.5.27", features = ["derive"] }
 rand = "0.8"
 wasm-bindgen-test = "0.3.50"
 js-sys = "0.3.77"
+protobuf = "3.7.2"
+protobuf-json-mapping = "3.7.2"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 wasm-bindgen = { version = "0.2", features = ["serde"] }
@@ -38,3 +40,6 @@ reqwest = { version = "0.12.12", features = ["blocking"] }
 version = "0.2.15"
 features = ["js"]
 
+[build-dependencies]
+protobuf-codegen = "3.7"
+protoc-bin-vendored = "3"
