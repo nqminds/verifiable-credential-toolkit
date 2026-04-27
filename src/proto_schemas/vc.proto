@@ -17,8 +17,6 @@ message Proof {
   string challenge = 8;
   string domain = 9;
 
-  // preserve proof fields not explicitly modeled
-  map<string, google.protobuf.Value> extra = 99;
 }
 
 message ProofList {
@@ -47,8 +45,6 @@ message UnsignedVerifiableCredential {
   repeated google.protobuf.Value evidence = 12;
   google.protobuf.Value terms_of_use = 13 [json_name = "termsOfUse"];
 
-  // preserve any top-level VC fields not explicitly modeled
-  map<string, google.protobuf.Value> extra = 99;
 }
 
 message VerifiableCredential {
@@ -69,14 +65,10 @@ message VerifiableCredential {
   google.protobuf.Value credential_schema = 11 [json_name = "credentialSchema"];
   repeated google.protobuf.Value evidence = 12;
   google.protobuf.Value terms_of_use = 13 [json_name = "termsOfUse"];
-
-  // support single-proof and multi-proof forms directly at the root
-  // (Alternatively, you could use a google.protobuf.Value proof = 20; if JSON structure is highly dynamic)
-  oneof proof_kind {
-    Proof proof = 14;
-    ProofList proofs = 15;
-  }
+  
+  Proof proof = 14;
+  
 
   // preserve any top-level VC fields not explicitly modeled
-  map<string, google.protobuf.Value> extra = 16;
+  map<string, google.protobuf.Value> extra = 15;
 }
