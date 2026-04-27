@@ -188,21 +188,32 @@ pub fn generate_keypair() -> KeyPair {
 }
 
 // protobuf encoding/decoding functions --------------------------------------------------------
-use crate::bindings::protobuf::{sign_protobuf_vc, verify_protobuf_vc};
-use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-pub fn wasm_sign_protobuf_vc(
+pub fn sign_protobuf_vc(
     unsigned_vc_protobuf: &[u8],
     private_key: &[u8],
 ) -> Result<Vec<u8>, JsError> {
-    sign_protobuf_vc(unsigned_vc_protobuf, private_key).map_err(|e| JsError::new(&e))
+    crate::bindings::protobuf::sign_protobuf_vc(unsigned_vc_protobuf, private_key)
+        .map_err(|e| JsError::new(&format!("Protobuf signing failed: {}", e)))
 }
 
 #[wasm_bindgen]
-pub fn wasm_verify_protobuf_vc(
-    signed_vc_protobuf: &[u8],
-    public_key: &[u8],
-) -> Result<(), JsError> {
-    verify_protobuf_vc(signed_vc_protobuf, public_key).map_err(|e| JsError::new(&e))
+pub fn verify_protobuf_vc(signed_vc_protobuf: &[u8], public_key: &[u8]) -> Result<(), JsError> {
+    crate::bindings::protobuf::verify_protobuf_vc(signed_vc_protobuf, public_key)
+        .map_err(|e| JsError::new(&format!("Protobuf verification failed: {}", e)))
+}
+
+// cbor encoding/decoding functions --------------------------------------------------------
+
+#[wasm_bindgen]
+pub fn sign_cbor_vc(unsigned_vc_cbor: &[u8], private_key: &[u8]) -> Result<Vec<u8>, JsError> {
+    crate::bindings::cbor::sign_cbor_vc(unsigned_vc_cbor, private_key)
+        .map_err(|e| JsError::new(&format!("CBOR signing failed: {}", e)))
+}
+
+#[wasm_bindgen]
+pub fn verify_cbor_vc(signed_vc_cbor: &[u8], public_key: &[u8]) -> Result<(), JsError> {
+    crate::bindings::cbor::verify_cbor_vc(signed_vc_cbor, public_key)
+        .map_err(|e| JsError::new(&format!("CBOR verification failed: {}", e)))
 }
