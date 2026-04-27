@@ -9,7 +9,7 @@ use serde_with::{serde_as, OneOrMany};
 use std::collections::HashMap;
 use url::Url;
 
-pub(crate) mod bindings;
+pub mod bindings;
 pub(crate) mod proto_schemas;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
