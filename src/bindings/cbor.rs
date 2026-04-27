@@ -10,34 +10,34 @@ pub fn decode_unsigned_vc_from_cbor(
     decoded
 }
 
-/// Decode protobuf bytes into the existing signed VC Rust struct.
+/// Decode cbor bytes into the existing signed VC Rust struct.
 pub fn decode_signed_vc_from_cbor(bytes: &[u8]) -> Result<VerifiableCredential, c2pa_cbor::Error> {
     let decoded: Result<VerifiableCredential, c2pa_cbor::Error> = from_slice(bytes);
     decoded
 }
 
-/// Encode the existing signed VC Rust struct into protobuf bytes.
+/// Encode the existing signed VC Rust struct into cbor bytes.
 pub fn encode_signed_vc_to_cbor(vc: &VerifiableCredential) -> Result<Vec<u8>, c2pa_cbor::Error> {
     let encoded: Result<Vec<u8>, c2pa_cbor::Error> = to_vec(&vc);
     encoded
 }
 
 pub fn sign_cbor_vc(
-    unsigned_vc_protobuf: &[u8],
+    unsigned_vc_cbor: &[u8],
     private_key: &[u8],
 ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let decoded = decode_unsigned_vc_from_cbor(unsigned_vc_protobuf)?;
+    let decoded = decode_unsigned_vc_from_cbor(unsigned_vc_cbor)?;
     let signed = decoded.sign(private_key)?;
 
     Ok(encode_signed_vc_to_cbor(&signed)?)
 }
 
-/// Convenience wrapper: decode signed VC protobuf and verify with existing JSON-path logic.
+/// Convenience wrapper: decode signed VC cbor and verify with existing JSON-path logic.
 pub fn verify_cbor_vc(
-    signed_vc_protobuf: &[u8],
+    signed_vc_cbor: &[u8],
     public_key: &[u8],
 ) -> Result<(), Box<dyn std::error::Error + 'static>> {
-    let decoded = decode_signed_vc_from_cbor(signed_vc_protobuf)?;
+    let decoded = decode_signed_vc_from_cbor(signed_vc_cbor)?;
     decoded.verify(public_key)
 }
 
@@ -76,6 +76,6 @@ mod tests {
         let cbor: Vec<u8> = to_vec(&unsigned_vc).expect("failed to serialize unsigned VC to CBOR");
         let signed_bytes = sign_cbor_vc(&cbor, &private_key).expect("CBOR signing failed");
 
-        verify_cbor_vc(&signed_bytes, &public_key).expect("protobuf verification failed");
+        verify_cbor_vc(&signed_bytes, &public_key).expect("cbor verification failed");
     }
 }

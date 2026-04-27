@@ -1,5 +1,5 @@
-use crate::proto_schemas::vc::UnsignedVerifiableCredential as PbUnsignedVerifiableCredential;
-use crate::proto_schemas::vc::VerifiableCredential as PbVerifiableCredential;
+use crate::proto_schemas::vc::UnsignedVerifiableCredential as ProtobufUnsignedVerifiableCredential;
+use crate::proto_schemas::vc::VerifiableCredential as ProtobufVerifiableCredential;
 use crate::UnsignedVerifiableCredential;
 use crate::VerifiableCredential;
 use protobuf::Message;
@@ -9,33 +9,36 @@ use protobuf_json_mapping::{
 
 pub type ProtoResult<T> = Result<T, String>;
 
-fn pb_signed_to_domain(pb: PbVerifiableCredential) -> ProtoResult<VerifiableCredential> {
-    let json =
-        protobuf_to_json(&pb).map_err(|e| format!("protobuf->json conversion failed: {e}"))?;
+fn protobuf_signed_to_domain(
+    protobuf: ProtobufVerifiableCredential,
+) -> ProtoResult<VerifiableCredential> {
+    let json = protobuf_to_json(&protobuf)
+        .map_err(|e| format!("protobuf->json conversion failed: {e}"))?;
     serde_json::from_str::<VerifiableCredential>(&json)
         .map_err(|e| format!("json->VerifiableCredential conversion failed: {e}"))
 }
 
-fn pb_unsigned_to_domain(
-    pb: PbUnsignedVerifiableCredential,
+fn protobuf_unsigned_to_domain(
+    protobuf: ProtobufUnsignedVerifiableCredential,
 ) -> ProtoResult<UnsignedVerifiableCredential> {
-    let json =
-        protobuf_to_json(&pb).map_err(|e| format!("protobuf->json conversion failed: {e}"))?;
+    let json = protobuf_to_json(&protobuf)
+        .map_err(|e| format!("protobuf->json conversion failed: {e}"))?;
     serde_json::from_str::<UnsignedVerifiableCredential>(&json)
         .map_err(|e| format!("json->UnsignedVerifiableCredential conversion failed: {e}"))
 }
 
-/// Decode protobuf bytes into the existing unsigned VC Rust struct.
+/// Decode protobuf bytes into the protobuf-generated unsigned VC struct.
 pub fn decode_unsigned_vc_from_protobuf(
     bytes: &[u8],
-) -> ProtoResult<PbUnsignedVerifiableCredential> {
-    PbUnsignedVerifiableCredential::parse_from_bytes(bytes)
-        .map_err(|e| format!("invalid protobuf:{e}"))
+) -> ProtoResult<ProtobufUnsignedVerifiableCredential> {
+    ProtobufUnsignedVerifiableCredential::parse_from_bytes(bytes)
+        .map_err(|e| format!("invalid protobuf: {e}"))
 }
 
-/// Decode protobuf bytes into the existing signed VC Rust struct.
-pub fn decode_signed_vc_from_protobuf(bytes: &[u8]) -> ProtoResult<PbVerifiableCredential> {
-    PbVerifiableCredential::parse_from_bytes(bytes).map_err(|e| format!("invalid protobuf:{e}"))
+/// Decode protobuf bytes into the protobuf-generated signed VC struct.
+pub fn decode_signed_vc_from_protobuf(bytes: &[u8]) -> ProtoResult<ProtobufVerifiableCredential> {
+    ProtobufVerifiableCredential::parse_from_bytes(bytes)
+        .map_err(|e| format!("invalid protobuf: {e}"))
 }
 
 /// Encode the existing signed VC Rust struct into protobuf bytes.
@@ -43,10 +46,11 @@ pub fn encode_signed_vc_to_protobuf(vc: &VerifiableCredential) -> ProtoResult<Ve
     let json = serde_json::to_string(vc)
         .map_err(|e| format!("VerifiableCredential->json conversion failed: {e}"))?;
 
-    let pb: PbVerifiableCredential =
+    let protobuf: ProtobufVerifiableCredential =
         json_to_protobuf(&json).map_err(|e| format!("json->protobuf conversion failed: {e}"))?;
 
-    pb.write_to_bytes()
+    protobuf
+        .write_to_bytes()
         .map_err(|e| format!("protobuf serialization failed: {e}"))
 }
 
@@ -54,7 +58,7 @@ pub fn encode_signed_vc_to_protobuf(vc: &VerifiableCredential) -> ProtoResult<Ve
 pub fn sign_protobuf_vc(unsigned_vc_protobuf: &[u8], private_key: &[u8]) -> ProtoResult<Vec<u8>> {
     let signed_vc = {
         let unsigned_vc = decode_unsigned_vc_from_protobuf(unsigned_vc_protobuf)?;
-        let unsigned_vc2 = pb_unsigned_to_domain(unsigned_vc);
+        let unsigned_vc2 = protobuf_unsigned_to_domain(unsigned_vc);
         unsigned_vc2?.sign(private_key)
     };
     match signed_vc {
@@ -66,7 +70,7 @@ pub fn sign_protobuf_vc(unsigned_vc_protobuf: &[u8], private_key: &[u8]) -> Prot
 /// Convenience wrapper: decode signed VC protobuf and verify with existing JSON-path logic.
 pub fn verify_protobuf_vc(signed_vc_protobuf: &[u8], public_key: &[u8]) -> ProtoResult<()> {
     let signed_vc = decode_signed_vc_from_protobuf(signed_vc_protobuf)?;
-    let signed_vc2 = pb_signed_to_domain(signed_vc)?;
+    let signed_vc2 = protobuf_signed_to_domain(signed_vc)?;
     signed_vc2
         .verify(public_key)
         .map_err(|e| format!("verification failed: {e}"))
@@ -74,7 +78,9 @@ pub fn verify_protobuf_vc(signed_vc_protobuf: &[u8], public_key: &[u8]) -> Proto
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{generate_keypair, proto_schemas::vc::UnsignedVerifiableCredential as PbUnsigned};
+    use crate::{
+        generate_keypair, proto_schemas::vc::UnsignedVerifiableCredential as ProtobufUnsigned,
+    };
     use protobuf::Message;
     use serde_json::json;
 
@@ -105,9 +111,11 @@ mod tests {
         let unsigned_vc = sample_unsigned_vc();
         let json = serde_json::to_string(&unsigned_vc).expect("failed to serialize unsigned VC");
 
-        let pb: PbUnsigned =
+        let protobuf: ProtobufUnsigned =
             protobuf_json_mapping::parse_from_str(&json).expect("json->protobuf conversion failed");
-        let unsigned_bytes = pb.write_to_bytes().expect("protobuf serialization failed");
+        let unsigned_bytes = protobuf
+            .write_to_bytes()
+            .expect("protobuf serialization failed");
 
         let signed_bytes =
             sign_protobuf_vc(&unsigned_bytes, &private_key).expect("protobuf signing failed");
