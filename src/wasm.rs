@@ -186,3 +186,23 @@ pub fn generate_keypair() -> KeyPair {
     let verifying_key_bytes = verifying_key.to_bytes().to_vec();
     KeyPair::new(signing_key_bytes, verifying_key_bytes)
 }
+
+// protobuf encoding/decoding functions --------------------------------------------------------
+use crate::bindings::protobuf::{sign_protobuf_vc, verify_protobuf_vc};
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+pub fn wasm_sign_protobuf_vc(
+    unsigned_vc_protobuf: &[u8],
+    private_key: &[u8],
+) -> Result<Vec<u8>, JsError> {
+    sign_protobuf_vc(unsigned_vc_protobuf, private_key).map_err(|e| JsError::new(&e))
+}
+
+#[wasm_bindgen]
+pub fn wasm_verify_protobuf_vc(
+    signed_vc_protobuf: &[u8],
+    public_key: &[u8],
+) -> Result<(), JsError> {
+    verify_protobuf_vc(signed_vc_protobuf, public_key).map_err(|e| JsError::new(&e))
+}
