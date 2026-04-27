@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use url::Url;
 
 pub mod bindings;
-pub(crate) mod proto_schemas;
+pub mod proto_schemas;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 
