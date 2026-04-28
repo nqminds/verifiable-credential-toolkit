@@ -1,74 +1,100 @@
 syntax = "proto3";
 
-package verifiable_credential_toolkit.v1;
-
 import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 
-
-
-message Proof {
-  string type = 1;
-  string created = 2;
-  string verification_method = 3 [json_name = "verificationMethod"];
-  string proof_purpose = 4 [json_name = "proofPurpose"];
-  string cryptosuite = 5;
-  string proof_value = 6 [json_name = "proofValue"];
-  string jws = 7;
-  string challenge = 8;
-  string domain = 9;
-
-}
-
-message ProofList {
-  repeated Proof items = 1;
-}
-
+/// Mirrors Rust UnsignedVerifiableCredential JSON shape.
 message UnsignedVerifiableCredential {
   repeated string context = 1 [json_name = "@context"];
-  string id = 2;
-  repeated string types = 3 [json_name = "type"];
+  google.protobuf.StringValue id = 2 [json_name = "id"];
 
-  google.protobuf.Value issuer = 4;
+  // OneOrMany<String> in Rust ("type": "x" | ["x", ...])
+  google.protobuf.Value credential_type = 3 [json_name = "type"];
 
-  // use Value for max compatibility with current JSON behavior
-  google.protobuf.Value credential_subject = 5 [json_name = "credentialSubject"];
-  google.protobuf.Value credential_status = 6 [json_name = "credentialStatus"];
+  // LanguageValue in Rust (string | object)
+  google.protobuf.Value name = 4 [json_name = "name"];
+  google.protobuf.Value description = 5 [json_name = "description"];
 
-  string valid_from = 7 [json_name = "validFrom"];
-  string valid_until = 8 [json_name = "validUntil"];
+  // Issuer in Rust (string | object)
+  google.protobuf.Value issuer = 6 [json_name = "issuer"];
 
-  // optional compatibility with VC v1-style fields
-  string issuance_date = 9 [json_name = "issuanceDate"];
-  string expiration_date = 10 [json_name = "expirationDate"];
+  // serde_json::Value in Rust
+  google.protobuf.Value credential_subject = 7 [json_name = "credentialSubject"];
 
+  google.protobuf.Timestamp valid_from = 8 [json_name = "validFrom"];
+  google.protobuf.Timestamp valid_until = 9 [json_name = "validUntil"];
+
+  Status credential_status = 10 [json_name = "credentialStatus"];
+
+  // OneOrMany<CredentialSchema> in Rust (object | [object, ...])
   google.protobuf.Value credential_schema = 11 [json_name = "credentialSchema"];
-  repeated google.protobuf.Value evidence = 12;
-  google.protobuf.Value terms_of_use = 13 [json_name = "termsOfUse"];
-
 }
 
+/// Mirrors Rust VerifiableCredential with #[serde(flatten)] + proof.
 message VerifiableCredential {
   repeated string context = 1 [json_name = "@context"];
-  string id = 2;
-  repeated string types = 3 [json_name = "type"];
+  google.protobuf.StringValue id = 2 [json_name = "id"];
 
-  google.protobuf.Value issuer = 4;
-  google.protobuf.Value credential_subject = 5 [json_name = "credentialSubject"];
-  google.protobuf.Value credential_status = 6 [json_name = "credentialStatus"];
-
-  string valid_from = 7 [json_name = "validFrom"];
-  string valid_until = 8 [json_name = "validUntil"];
-
-  string issuance_date = 9 [json_name = "issuanceDate"];
-  string expiration_date = 10 [json_name = "expirationDate"];
-
+  google.protobuf.Value credential_type = 3 [json_name = "type"];
+  google.protobuf.Value name = 4 [json_name = "name"];
+  google.protobuf.Value description = 5 [json_name = "description"];
+  google.protobuf.Value issuer = 6 [json_name = "issuer"];
+  google.protobuf.Value credential_subject = 7 [json_name = "credentialSubject"];
+  google.protobuf.Timestamp valid_from = 8 [json_name = "validFrom"];
+  google.protobuf.Timestamp valid_until = 9 [json_name = "validUntil"];
+  Status credential_status = 10 [json_name = "credentialStatus"];
   google.protobuf.Value credential_schema = 11 [json_name = "credentialSchema"];
-  repeated google.protobuf.Value evidence = 12;
-  google.protobuf.Value terms_of_use = 13 [json_name = "termsOfUse"];
-  
-  Proof proof = 14;
-  
 
-  // preserve any top-level VC fields not explicitly modeled
-  map<string, google.protobuf.Value> extra = 15;
+  Proof proof = 12 [json_name = "proof"];
+}
+
+/// Mirrors Rust VerifiablePresentation JSON shape.
+message VerifiablePresentation {
+  repeated string context = 1 [json_name = "@context"];
+  google.protobuf.StringValue id = 2 [json_name = "id"];
+
+  // OneOrMany<String> in Rust
+  google.protobuf.Value presentation_type = 3 [json_name = "type"];
+
+  // OneOrMany<VerifiableCredential> in Rust
+  google.protobuf.Value verifiable_credential = 4 [json_name = "verifiableCredential"];
+
+  // Holder in Rust (string | object)
+  google.protobuf.Value holder = 5 [json_name = "holder"];
+}
+
+/// Mirrors Rust Status.
+message Status {
+  google.protobuf.StringValue id = 1 [json_name = "id"];
+
+  // OneOrMany<String> in Rust ("type": "x" | ["x", ...])
+  google.protobuf.Value status_type = 2 [json_name = "type"];
+}
+
+/// Mirrors Rust CredentialSchema object.
+message CredentialSchema {
+  string id = 1 [json_name = "id"];
+  string schema_type = 2 [json_name = "type"];
+}
+
+/// Mirrors Rust Proof.
+message Proof {
+  google.protobuf.StringValue id = 1 [json_name = "id"];
+  string proof_type = 2 [json_name = "type"];
+  string proof_purpose = 3 [json_name = "proofPurpose"];
+  google.protobuf.StringValue verification_method = 4 [json_name = "verificationMethod"];
+  google.protobuf.StringValue cryptosuite = 5 [json_name = "cryptosuite"];
+  google.protobuf.Timestamp created = 6 [json_name = "created"];
+  google.protobuf.Timestamp expires = 7 [json_name = "expires"];
+
+  // OneOrMany<String> in Rust
+  google.protobuf.Value domain = 8 [json_name = "domain"];
+
+  google.protobuf.StringValue challenge = 9 [json_name = "challenge"];
+  string proof_value = 10 [json_name = "proofValue"];
+  google.protobuf.StringValue previous_proof = 11 [json_name = "previousProof"];
+
+  // OneOrMany<String> in Rust
+  google.protobuf.Value nonce = 12 [json_name = "nonce"];
 }

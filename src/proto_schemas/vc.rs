@@ -24,427 +24,34 @@
 /// of protobuf runtime.
 const _PROTOBUF_VERSION_CHECK: () = ::protobuf::VERSION_3_7_2;
 
-// @@protoc_insertion_point(message:verifiable_credential_toolkit.v1.Proof)
-#[derive(PartialEq,Clone,Default,Debug)]
-pub struct Proof {
-    // message fields
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.Proof.type)
-    pub type_: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.Proof.created)
-    pub created: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.Proof.verification_method)
-    pub verification_method: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.Proof.proof_purpose)
-    pub proof_purpose: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.Proof.cryptosuite)
-    pub cryptosuite: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.Proof.proof_value)
-    pub proof_value: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.Proof.jws)
-    pub jws: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.Proof.challenge)
-    pub challenge: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.Proof.domain)
-    pub domain: ::std::string::String,
-    // special fields
-    // @@protoc_insertion_point(special_field:verifiable_credential_toolkit.v1.Proof.special_fields)
-    pub special_fields: ::protobuf::SpecialFields,
-}
-
-impl<'a> ::std::default::Default for &'a Proof {
-    fn default() -> &'a Proof {
-        <Proof as ::protobuf::Message>::default_instance()
-    }
-}
-
-impl Proof {
-    pub fn new() -> Proof {
-        ::std::default::Default::default()
-    }
-
-    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(9);
-        let mut oneofs = ::std::vec::Vec::with_capacity(0);
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "type",
-            |m: &Proof| { &m.type_ },
-            |m: &mut Proof| { &mut m.type_ },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "created",
-            |m: &Proof| { &m.created },
-            |m: &mut Proof| { &mut m.created },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "verification_method",
-            |m: &Proof| { &m.verification_method },
-            |m: &mut Proof| { &mut m.verification_method },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "proof_purpose",
-            |m: &Proof| { &m.proof_purpose },
-            |m: &mut Proof| { &mut m.proof_purpose },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "cryptosuite",
-            |m: &Proof| { &m.cryptosuite },
-            |m: &mut Proof| { &mut m.cryptosuite },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "proof_value",
-            |m: &Proof| { &m.proof_value },
-            |m: &mut Proof| { &mut m.proof_value },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "jws",
-            |m: &Proof| { &m.jws },
-            |m: &mut Proof| { &mut m.jws },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "challenge",
-            |m: &Proof| { &m.challenge },
-            |m: &mut Proof| { &mut m.challenge },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "domain",
-            |m: &Proof| { &m.domain },
-            |m: &mut Proof| { &mut m.domain },
-        ));
-        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<Proof>(
-            "Proof",
-            fields,
-            oneofs,
-        )
-    }
-}
-
-impl ::protobuf::Message for Proof {
-    const NAME: &'static str = "Proof";
-
-    fn is_initialized(&self) -> bool {
-        true
-    }
-
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
-        while let Some(tag) = is.read_raw_tag_or_eof()? {
-            match tag {
-                10 => {
-                    self.type_ = is.read_string()?;
-                },
-                18 => {
-                    self.created = is.read_string()?;
-                },
-                26 => {
-                    self.verification_method = is.read_string()?;
-                },
-                34 => {
-                    self.proof_purpose = is.read_string()?;
-                },
-                42 => {
-                    self.cryptosuite = is.read_string()?;
-                },
-                50 => {
-                    self.proof_value = is.read_string()?;
-                },
-                58 => {
-                    self.jws = is.read_string()?;
-                },
-                66 => {
-                    self.challenge = is.read_string()?;
-                },
-                74 => {
-                    self.domain = is.read_string()?;
-                },
-                tag => {
-                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
-                },
-            };
-        }
-        ::std::result::Result::Ok(())
-    }
-
-    // Compute sizes of nested messages
-    #[allow(unused_variables)]
-    fn compute_size(&self) -> u64 {
-        let mut my_size = 0;
-        if !self.type_.is_empty() {
-            my_size += ::protobuf::rt::string_size(1, &self.type_);
-        }
-        if !self.created.is_empty() {
-            my_size += ::protobuf::rt::string_size(2, &self.created);
-        }
-        if !self.verification_method.is_empty() {
-            my_size += ::protobuf::rt::string_size(3, &self.verification_method);
-        }
-        if !self.proof_purpose.is_empty() {
-            my_size += ::protobuf::rt::string_size(4, &self.proof_purpose);
-        }
-        if !self.cryptosuite.is_empty() {
-            my_size += ::protobuf::rt::string_size(5, &self.cryptosuite);
-        }
-        if !self.proof_value.is_empty() {
-            my_size += ::protobuf::rt::string_size(6, &self.proof_value);
-        }
-        if !self.jws.is_empty() {
-            my_size += ::protobuf::rt::string_size(7, &self.jws);
-        }
-        if !self.challenge.is_empty() {
-            my_size += ::protobuf::rt::string_size(8, &self.challenge);
-        }
-        if !self.domain.is_empty() {
-            my_size += ::protobuf::rt::string_size(9, &self.domain);
-        }
-        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
-        self.special_fields.cached_size().set(my_size as u32);
-        my_size
-    }
-
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
-        if !self.type_.is_empty() {
-            os.write_string(1, &self.type_)?;
-        }
-        if !self.created.is_empty() {
-            os.write_string(2, &self.created)?;
-        }
-        if !self.verification_method.is_empty() {
-            os.write_string(3, &self.verification_method)?;
-        }
-        if !self.proof_purpose.is_empty() {
-            os.write_string(4, &self.proof_purpose)?;
-        }
-        if !self.cryptosuite.is_empty() {
-            os.write_string(5, &self.cryptosuite)?;
-        }
-        if !self.proof_value.is_empty() {
-            os.write_string(6, &self.proof_value)?;
-        }
-        if !self.jws.is_empty() {
-            os.write_string(7, &self.jws)?;
-        }
-        if !self.challenge.is_empty() {
-            os.write_string(8, &self.challenge)?;
-        }
-        if !self.domain.is_empty() {
-            os.write_string(9, &self.domain)?;
-        }
-        os.write_unknown_fields(self.special_fields.unknown_fields())?;
-        ::std::result::Result::Ok(())
-    }
-
-    fn special_fields(&self) -> &::protobuf::SpecialFields {
-        &self.special_fields
-    }
-
-    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
-        &mut self.special_fields
-    }
-
-    fn new() -> Proof {
-        Proof::new()
-    }
-
-    fn clear(&mut self) {
-        self.type_.clear();
-        self.created.clear();
-        self.verification_method.clear();
-        self.proof_purpose.clear();
-        self.cryptosuite.clear();
-        self.proof_value.clear();
-        self.jws.clear();
-        self.challenge.clear();
-        self.domain.clear();
-        self.special_fields.clear();
-    }
-
-    fn default_instance() -> &'static Proof {
-        static instance: Proof = Proof {
-            type_: ::std::string::String::new(),
-            created: ::std::string::String::new(),
-            verification_method: ::std::string::String::new(),
-            proof_purpose: ::std::string::String::new(),
-            cryptosuite: ::std::string::String::new(),
-            proof_value: ::std::string::String::new(),
-            jws: ::std::string::String::new(),
-            challenge: ::std::string::String::new(),
-            domain: ::std::string::String::new(),
-            special_fields: ::protobuf::SpecialFields::new(),
-        };
-        &instance
-    }
-}
-
-impl ::protobuf::MessageFull for Proof {
-    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
-        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
-        descriptor.get(|| file_descriptor().message_by_package_relative_name("Proof").unwrap()).clone()
-    }
-}
-
-impl ::std::fmt::Display for Proof {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        ::protobuf::text_format::fmt(self, f)
-    }
-}
-
-impl ::protobuf::reflect::ProtobufValue for Proof {
-    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
-}
-
-// @@protoc_insertion_point(message:verifiable_credential_toolkit.v1.ProofList)
-#[derive(PartialEq,Clone,Default,Debug)]
-pub struct ProofList {
-    // message fields
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.ProofList.items)
-    pub items: ::std::vec::Vec<Proof>,
-    // special fields
-    // @@protoc_insertion_point(special_field:verifiable_credential_toolkit.v1.ProofList.special_fields)
-    pub special_fields: ::protobuf::SpecialFields,
-}
-
-impl<'a> ::std::default::Default for &'a ProofList {
-    fn default() -> &'a ProofList {
-        <ProofList as ::protobuf::Message>::default_instance()
-    }
-}
-
-impl ProofList {
-    pub fn new() -> ProofList {
-        ::std::default::Default::default()
-    }
-
-    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(1);
-        let mut oneofs = ::std::vec::Vec::with_capacity(0);
-        fields.push(::protobuf::reflect::rt::v2::make_vec_simpler_accessor::<_, _>(
-            "items",
-            |m: &ProofList| { &m.items },
-            |m: &mut ProofList| { &mut m.items },
-        ));
-        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<ProofList>(
-            "ProofList",
-            fields,
-            oneofs,
-        )
-    }
-}
-
-impl ::protobuf::Message for ProofList {
-    const NAME: &'static str = "ProofList";
-
-    fn is_initialized(&self) -> bool {
-        true
-    }
-
-    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
-        while let Some(tag) = is.read_raw_tag_or_eof()? {
-            match tag {
-                10 => {
-                    self.items.push(is.read_message()?);
-                },
-                tag => {
-                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
-                },
-            };
-        }
-        ::std::result::Result::Ok(())
-    }
-
-    // Compute sizes of nested messages
-    #[allow(unused_variables)]
-    fn compute_size(&self) -> u64 {
-        let mut my_size = 0;
-        for value in &self.items {
-            let len = value.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
-        };
-        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
-        self.special_fields.cached_size().set(my_size as u32);
-        my_size
-    }
-
-    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
-        for v in &self.items {
-            ::protobuf::rt::write_message_field_with_cached_size(1, v, os)?;
-        };
-        os.write_unknown_fields(self.special_fields.unknown_fields())?;
-        ::std::result::Result::Ok(())
-    }
-
-    fn special_fields(&self) -> &::protobuf::SpecialFields {
-        &self.special_fields
-    }
-
-    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
-        &mut self.special_fields
-    }
-
-    fn new() -> ProofList {
-        ProofList::new()
-    }
-
-    fn clear(&mut self) {
-        self.items.clear();
-        self.special_fields.clear();
-    }
-
-    fn default_instance() -> &'static ProofList {
-        static instance: ProofList = ProofList {
-            items: ::std::vec::Vec::new(),
-            special_fields: ::protobuf::SpecialFields::new(),
-        };
-        &instance
-    }
-}
-
-impl ::protobuf::MessageFull for ProofList {
-    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
-        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
-        descriptor.get(|| file_descriptor().message_by_package_relative_name("ProofList").unwrap()).clone()
-    }
-}
-
-impl ::std::fmt::Display for ProofList {
-    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-        ::protobuf::text_format::fmt(self, f)
-    }
-}
-
-impl ::protobuf::reflect::ProtobufValue for ProofList {
-    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
-}
-
-// @@protoc_insertion_point(message:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential)
+// @@protoc_insertion_point(message:UnsignedVerifiableCredential)
 #[derive(PartialEq,Clone,Default,Debug)]
 pub struct UnsignedVerifiableCredential {
     // message fields
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.context)
+    // @@protoc_insertion_point(field:UnsignedVerifiableCredential.context)
     pub context: ::std::vec::Vec<::std::string::String>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.id)
-    pub id: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.types)
-    pub types: ::std::vec::Vec<::std::string::String>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.issuer)
+    // @@protoc_insertion_point(field:UnsignedVerifiableCredential.id)
+    pub id: ::protobuf::MessageField<::protobuf::well_known_types::wrappers::StringValue>,
+    // @@protoc_insertion_point(field:UnsignedVerifiableCredential.credential_type)
+    pub credential_type: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
+    // @@protoc_insertion_point(field:UnsignedVerifiableCredential.name)
+    pub name: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
+    // @@protoc_insertion_point(field:UnsignedVerifiableCredential.description)
+    pub description: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
+    // @@protoc_insertion_point(field:UnsignedVerifiableCredential.issuer)
     pub issuer: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.credential_subject)
+    // @@protoc_insertion_point(field:UnsignedVerifiableCredential.credential_subject)
     pub credential_subject: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.credential_status)
-    pub credential_status: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.valid_from)
-    pub valid_from: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.valid_until)
-    pub valid_until: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.issuance_date)
-    pub issuance_date: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.expiration_date)
-    pub expiration_date: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.credential_schema)
+    // @@protoc_insertion_point(field:UnsignedVerifiableCredential.valid_from)
+    pub valid_from: ::protobuf::MessageField<::protobuf::well_known_types::timestamp::Timestamp>,
+    // @@protoc_insertion_point(field:UnsignedVerifiableCredential.valid_until)
+    pub valid_until: ::protobuf::MessageField<::protobuf::well_known_types::timestamp::Timestamp>,
+    // @@protoc_insertion_point(field:UnsignedVerifiableCredential.credential_status)
+    pub credential_status: ::protobuf::MessageField<Status>,
+    // @@protoc_insertion_point(field:UnsignedVerifiableCredential.credential_schema)
     pub credential_schema: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.evidence)
-    pub evidence: ::std::vec::Vec<::protobuf::well_known_types::struct_::Value>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.terms_of_use)
-    pub terms_of_use: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
     // special fields
-    // @@protoc_insertion_point(special_field:verifiable_credential_toolkit.v1.UnsignedVerifiableCredential.special_fields)
+    // @@protoc_insertion_point(special_field:UnsignedVerifiableCredential.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
 }
 
@@ -460,22 +67,32 @@ impl UnsignedVerifiableCredential {
     }
 
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(13);
+        let mut fields = ::std::vec::Vec::with_capacity(11);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_vec_simpler_accessor::<_, _>(
             "context",
             |m: &UnsignedVerifiableCredential| { &m.context },
             |m: &mut UnsignedVerifiableCredential| { &mut m.context },
         ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::wrappers::StringValue>(
             "id",
             |m: &UnsignedVerifiableCredential| { &m.id },
             |m: &mut UnsignedVerifiableCredential| { &mut m.id },
         ));
-        fields.push(::protobuf::reflect::rt::v2::make_vec_simpler_accessor::<_, _>(
-            "types",
-            |m: &UnsignedVerifiableCredential| { &m.types },
-            |m: &mut UnsignedVerifiableCredential| { &mut m.types },
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
+            "credential_type",
+            |m: &UnsignedVerifiableCredential| { &m.credential_type },
+            |m: &mut UnsignedVerifiableCredential| { &mut m.credential_type },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
+            "name",
+            |m: &UnsignedVerifiableCredential| { &m.name },
+            |m: &mut UnsignedVerifiableCredential| { &mut m.name },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
+            "description",
+            |m: &UnsignedVerifiableCredential| { &m.description },
+            |m: &mut UnsignedVerifiableCredential| { &mut m.description },
         ));
         fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
             "issuer",
@@ -487,45 +104,25 @@ impl UnsignedVerifiableCredential {
             |m: &UnsignedVerifiableCredential| { &m.credential_subject },
             |m: &mut UnsignedVerifiableCredential| { &mut m.credential_subject },
         ));
-        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
-            "credential_status",
-            |m: &UnsignedVerifiableCredential| { &m.credential_status },
-            |m: &mut UnsignedVerifiableCredential| { &mut m.credential_status },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::timestamp::Timestamp>(
             "valid_from",
             |m: &UnsignedVerifiableCredential| { &m.valid_from },
             |m: &mut UnsignedVerifiableCredential| { &mut m.valid_from },
         ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::timestamp::Timestamp>(
             "valid_until",
             |m: &UnsignedVerifiableCredential| { &m.valid_until },
             |m: &mut UnsignedVerifiableCredential| { &mut m.valid_until },
         ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "issuance_date",
-            |m: &UnsignedVerifiableCredential| { &m.issuance_date },
-            |m: &mut UnsignedVerifiableCredential| { &mut m.issuance_date },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "expiration_date",
-            |m: &UnsignedVerifiableCredential| { &m.expiration_date },
-            |m: &mut UnsignedVerifiableCredential| { &mut m.expiration_date },
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, Status>(
+            "credential_status",
+            |m: &UnsignedVerifiableCredential| { &m.credential_status },
+            |m: &mut UnsignedVerifiableCredential| { &mut m.credential_status },
         ));
         fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
             "credential_schema",
             |m: &UnsignedVerifiableCredential| { &m.credential_schema },
             |m: &mut UnsignedVerifiableCredential| { &mut m.credential_schema },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_vec_simpler_accessor::<_, _>(
-            "evidence",
-            |m: &UnsignedVerifiableCredential| { &m.evidence },
-            |m: &mut UnsignedVerifiableCredential| { &mut m.evidence },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
-            "terms_of_use",
-            |m: &UnsignedVerifiableCredential| { &m.terms_of_use },
-            |m: &mut UnsignedVerifiableCredential| { &mut m.terms_of_use },
         ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<UnsignedVerifiableCredential>(
             "UnsignedVerifiableCredential",
@@ -549,40 +146,34 @@ impl ::protobuf::Message for UnsignedVerifiableCredential {
                     self.context.push(is.read_string()?);
                 },
                 18 => {
-                    self.id = is.read_string()?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.id)?;
                 },
                 26 => {
-                    self.types.push(is.read_string()?);
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.credential_type)?;
                 },
                 34 => {
-                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.issuer)?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.name)?;
                 },
                 42 => {
-                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.credential_subject)?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.description)?;
                 },
                 50 => {
-                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.credential_status)?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.issuer)?;
                 },
                 58 => {
-                    self.valid_from = is.read_string()?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.credential_subject)?;
                 },
                 66 => {
-                    self.valid_until = is.read_string()?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.valid_from)?;
                 },
                 74 => {
-                    self.issuance_date = is.read_string()?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.valid_until)?;
                 },
                 82 => {
-                    self.expiration_date = is.read_string()?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.credential_status)?;
                 },
                 90 => {
                     ::protobuf::rt::read_singular_message_into_field(is, &mut self.credential_schema)?;
-                },
-                98 => {
-                    self.evidence.push(is.read_message()?);
-                },
-                106 => {
-                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.terms_of_use)?;
                 },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
@@ -599,12 +190,22 @@ impl ::protobuf::Message for UnsignedVerifiableCredential {
         for value in &self.context {
             my_size += ::protobuf::rt::string_size(1, &value);
         };
-        if !self.id.is_empty() {
-            my_size += ::protobuf::rt::string_size(2, &self.id);
+        if let Some(v) = self.id.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
         }
-        for value in &self.types {
-            my_size += ::protobuf::rt::string_size(3, &value);
-        };
+        if let Some(v) = self.credential_type.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.name.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.description.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
         if let Some(v) = self.issuer.as_ref() {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
@@ -613,31 +214,19 @@ impl ::protobuf::Message for UnsignedVerifiableCredential {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
         }
+        if let Some(v) = self.valid_from.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.valid_until.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
         if let Some(v) = self.credential_status.as_ref() {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
         }
-        if !self.valid_from.is_empty() {
-            my_size += ::protobuf::rt::string_size(7, &self.valid_from);
-        }
-        if !self.valid_until.is_empty() {
-            my_size += ::protobuf::rt::string_size(8, &self.valid_until);
-        }
-        if !self.issuance_date.is_empty() {
-            my_size += ::protobuf::rt::string_size(9, &self.issuance_date);
-        }
-        if !self.expiration_date.is_empty() {
-            my_size += ::protobuf::rt::string_size(10, &self.expiration_date);
-        }
         if let Some(v) = self.credential_schema.as_ref() {
-            let len = v.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
-        }
-        for value in &self.evidence {
-            let len = value.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
-        };
-        if let Some(v) = self.terms_of_use.as_ref() {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
         }
@@ -650,41 +239,35 @@ impl ::protobuf::Message for UnsignedVerifiableCredential {
         for v in &self.context {
             os.write_string(1, &v)?;
         };
-        if !self.id.is_empty() {
-            os.write_string(2, &self.id)?;
+        if let Some(v) = self.id.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(2, v, os)?;
         }
-        for v in &self.types {
-            os.write_string(3, &v)?;
-        };
-        if let Some(v) = self.issuer.as_ref() {
+        if let Some(v) = self.credential_type.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(3, v, os)?;
+        }
+        if let Some(v) = self.name.as_ref() {
             ::protobuf::rt::write_message_field_with_cached_size(4, v, os)?;
         }
-        if let Some(v) = self.credential_subject.as_ref() {
+        if let Some(v) = self.description.as_ref() {
             ::protobuf::rt::write_message_field_with_cached_size(5, v, os)?;
         }
-        if let Some(v) = self.credential_status.as_ref() {
+        if let Some(v) = self.issuer.as_ref() {
             ::protobuf::rt::write_message_field_with_cached_size(6, v, os)?;
         }
-        if !self.valid_from.is_empty() {
-            os.write_string(7, &self.valid_from)?;
+        if let Some(v) = self.credential_subject.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(7, v, os)?;
         }
-        if !self.valid_until.is_empty() {
-            os.write_string(8, &self.valid_until)?;
+        if let Some(v) = self.valid_from.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(8, v, os)?;
         }
-        if !self.issuance_date.is_empty() {
-            os.write_string(9, &self.issuance_date)?;
+        if let Some(v) = self.valid_until.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(9, v, os)?;
         }
-        if !self.expiration_date.is_empty() {
-            os.write_string(10, &self.expiration_date)?;
+        if let Some(v) = self.credential_status.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(10, v, os)?;
         }
         if let Some(v) = self.credential_schema.as_ref() {
             ::protobuf::rt::write_message_field_with_cached_size(11, v, os)?;
-        }
-        for v in &self.evidence {
-            ::protobuf::rt::write_message_field_with_cached_size(12, v, os)?;
-        };
-        if let Some(v) = self.terms_of_use.as_ref() {
-            ::protobuf::rt::write_message_field_with_cached_size(13, v, os)?;
         }
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
@@ -705,35 +288,31 @@ impl ::protobuf::Message for UnsignedVerifiableCredential {
     fn clear(&mut self) {
         self.context.clear();
         self.id.clear();
-        self.types.clear();
+        self.credential_type.clear();
+        self.name.clear();
+        self.description.clear();
         self.issuer.clear();
         self.credential_subject.clear();
-        self.credential_status.clear();
         self.valid_from.clear();
         self.valid_until.clear();
-        self.issuance_date.clear();
-        self.expiration_date.clear();
+        self.credential_status.clear();
         self.credential_schema.clear();
-        self.evidence.clear();
-        self.terms_of_use.clear();
         self.special_fields.clear();
     }
 
     fn default_instance() -> &'static UnsignedVerifiableCredential {
         static instance: UnsignedVerifiableCredential = UnsignedVerifiableCredential {
             context: ::std::vec::Vec::new(),
-            id: ::std::string::String::new(),
-            types: ::std::vec::Vec::new(),
+            id: ::protobuf::MessageField::none(),
+            credential_type: ::protobuf::MessageField::none(),
+            name: ::protobuf::MessageField::none(),
+            description: ::protobuf::MessageField::none(),
             issuer: ::protobuf::MessageField::none(),
             credential_subject: ::protobuf::MessageField::none(),
+            valid_from: ::protobuf::MessageField::none(),
+            valid_until: ::protobuf::MessageField::none(),
             credential_status: ::protobuf::MessageField::none(),
-            valid_from: ::std::string::String::new(),
-            valid_until: ::std::string::String::new(),
-            issuance_date: ::std::string::String::new(),
-            expiration_date: ::std::string::String::new(),
             credential_schema: ::protobuf::MessageField::none(),
-            evidence: ::std::vec::Vec::new(),
-            terms_of_use: ::protobuf::MessageField::none(),
             special_fields: ::protobuf::SpecialFields::new(),
         };
         &instance
@@ -757,42 +336,36 @@ impl ::protobuf::reflect::ProtobufValue for UnsignedVerifiableCredential {
     type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
 }
 
-// @@protoc_insertion_point(message:verifiable_credential_toolkit.v1.VerifiableCredential)
+// @@protoc_insertion_point(message:VerifiableCredential)
 #[derive(PartialEq,Clone,Default,Debug)]
 pub struct VerifiableCredential {
     // message fields
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.context)
+    // @@protoc_insertion_point(field:VerifiableCredential.context)
     pub context: ::std::vec::Vec<::std::string::String>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.id)
-    pub id: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.types)
-    pub types: ::std::vec::Vec<::std::string::String>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.issuer)
+    // @@protoc_insertion_point(field:VerifiableCredential.id)
+    pub id: ::protobuf::MessageField<::protobuf::well_known_types::wrappers::StringValue>,
+    // @@protoc_insertion_point(field:VerifiableCredential.credential_type)
+    pub credential_type: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
+    // @@protoc_insertion_point(field:VerifiableCredential.name)
+    pub name: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
+    // @@protoc_insertion_point(field:VerifiableCredential.description)
+    pub description: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
+    // @@protoc_insertion_point(field:VerifiableCredential.issuer)
     pub issuer: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.credential_subject)
+    // @@protoc_insertion_point(field:VerifiableCredential.credential_subject)
     pub credential_subject: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.credential_status)
-    pub credential_status: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.valid_from)
-    pub valid_from: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.valid_until)
-    pub valid_until: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.issuance_date)
-    pub issuance_date: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.expiration_date)
-    pub expiration_date: ::std::string::String,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.credential_schema)
+    // @@protoc_insertion_point(field:VerifiableCredential.valid_from)
+    pub valid_from: ::protobuf::MessageField<::protobuf::well_known_types::timestamp::Timestamp>,
+    // @@protoc_insertion_point(field:VerifiableCredential.valid_until)
+    pub valid_until: ::protobuf::MessageField<::protobuf::well_known_types::timestamp::Timestamp>,
+    // @@protoc_insertion_point(field:VerifiableCredential.credential_status)
+    pub credential_status: ::protobuf::MessageField<Status>,
+    // @@protoc_insertion_point(field:VerifiableCredential.credential_schema)
     pub credential_schema: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.evidence)
-    pub evidence: ::std::vec::Vec<::protobuf::well_known_types::struct_::Value>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.terms_of_use)
-    pub terms_of_use: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.proof)
+    // @@protoc_insertion_point(field:VerifiableCredential.proof)
     pub proof: ::protobuf::MessageField<Proof>,
-    // @@protoc_insertion_point(field:verifiable_credential_toolkit.v1.VerifiableCredential.extra)
-    pub extra: ::std::collections::HashMap<::std::string::String, ::protobuf::well_known_types::struct_::Value>,
     // special fields
-    // @@protoc_insertion_point(special_field:verifiable_credential_toolkit.v1.VerifiableCredential.special_fields)
+    // @@protoc_insertion_point(special_field:VerifiableCredential.special_fields)
     pub special_fields: ::protobuf::SpecialFields,
 }
 
@@ -808,22 +381,32 @@ impl VerifiableCredential {
     }
 
     fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
-        let mut fields = ::std::vec::Vec::with_capacity(15);
+        let mut fields = ::std::vec::Vec::with_capacity(12);
         let mut oneofs = ::std::vec::Vec::with_capacity(0);
         fields.push(::protobuf::reflect::rt::v2::make_vec_simpler_accessor::<_, _>(
             "context",
             |m: &VerifiableCredential| { &m.context },
             |m: &mut VerifiableCredential| { &mut m.context },
         ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::wrappers::StringValue>(
             "id",
             |m: &VerifiableCredential| { &m.id },
             |m: &mut VerifiableCredential| { &mut m.id },
         ));
-        fields.push(::protobuf::reflect::rt::v2::make_vec_simpler_accessor::<_, _>(
-            "types",
-            |m: &VerifiableCredential| { &m.types },
-            |m: &mut VerifiableCredential| { &mut m.types },
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
+            "credential_type",
+            |m: &VerifiableCredential| { &m.credential_type },
+            |m: &mut VerifiableCredential| { &mut m.credential_type },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
+            "name",
+            |m: &VerifiableCredential| { &m.name },
+            |m: &mut VerifiableCredential| { &mut m.name },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
+            "description",
+            |m: &VerifiableCredential| { &m.description },
+            |m: &mut VerifiableCredential| { &mut m.description },
         ));
         fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
             "issuer",
@@ -835,55 +418,30 @@ impl VerifiableCredential {
             |m: &VerifiableCredential| { &m.credential_subject },
             |m: &mut VerifiableCredential| { &mut m.credential_subject },
         ));
-        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
-            "credential_status",
-            |m: &VerifiableCredential| { &m.credential_status },
-            |m: &mut VerifiableCredential| { &mut m.credential_status },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::timestamp::Timestamp>(
             "valid_from",
             |m: &VerifiableCredential| { &m.valid_from },
             |m: &mut VerifiableCredential| { &mut m.valid_from },
         ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::timestamp::Timestamp>(
             "valid_until",
             |m: &VerifiableCredential| { &m.valid_until },
             |m: &mut VerifiableCredential| { &mut m.valid_until },
         ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "issuance_date",
-            |m: &VerifiableCredential| { &m.issuance_date },
-            |m: &mut VerifiableCredential| { &mut m.issuance_date },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
-            "expiration_date",
-            |m: &VerifiableCredential| { &m.expiration_date },
-            |m: &mut VerifiableCredential| { &mut m.expiration_date },
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, Status>(
+            "credential_status",
+            |m: &VerifiableCredential| { &m.credential_status },
+            |m: &mut VerifiableCredential| { &mut m.credential_status },
         ));
         fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
             "credential_schema",
             |m: &VerifiableCredential| { &m.credential_schema },
             |m: &mut VerifiableCredential| { &mut m.credential_schema },
         ));
-        fields.push(::protobuf::reflect::rt::v2::make_vec_simpler_accessor::<_, _>(
-            "evidence",
-            |m: &VerifiableCredential| { &m.evidence },
-            |m: &mut VerifiableCredential| { &mut m.evidence },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
-            "terms_of_use",
-            |m: &VerifiableCredential| { &m.terms_of_use },
-            |m: &mut VerifiableCredential| { &mut m.terms_of_use },
-        ));
         fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, Proof>(
             "proof",
             |m: &VerifiableCredential| { &m.proof },
             |m: &mut VerifiableCredential| { &mut m.proof },
-        ));
-        fields.push(::protobuf::reflect::rt::v2::make_map_simpler_accessor_new::<_, _>(
-            "extra",
-            |m: &VerifiableCredential| { &m.extra },
-            |m: &mut VerifiableCredential| { &mut m.extra },
         ));
         ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<VerifiableCredential>(
             "VerifiableCredential",
@@ -907,58 +465,37 @@ impl ::protobuf::Message for VerifiableCredential {
                     self.context.push(is.read_string()?);
                 },
                 18 => {
-                    self.id = is.read_string()?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.id)?;
                 },
                 26 => {
-                    self.types.push(is.read_string()?);
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.credential_type)?;
                 },
                 34 => {
-                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.issuer)?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.name)?;
                 },
                 42 => {
-                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.credential_subject)?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.description)?;
                 },
                 50 => {
-                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.credential_status)?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.issuer)?;
                 },
                 58 => {
-                    self.valid_from = is.read_string()?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.credential_subject)?;
                 },
                 66 => {
-                    self.valid_until = is.read_string()?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.valid_from)?;
                 },
                 74 => {
-                    self.issuance_date = is.read_string()?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.valid_until)?;
                 },
                 82 => {
-                    self.expiration_date = is.read_string()?;
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.credential_status)?;
                 },
                 90 => {
                     ::protobuf::rt::read_singular_message_into_field(is, &mut self.credential_schema)?;
                 },
                 98 => {
-                    self.evidence.push(is.read_message()?);
-                },
-                106 => {
-                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.terms_of_use)?;
-                },
-                114 => {
                     ::protobuf::rt::read_singular_message_into_field(is, &mut self.proof)?;
-                },
-                122 => {
-                    let len = is.read_raw_varint32()?;
-                    let old_limit = is.push_limit(len as u64)?;
-                    let mut key = ::std::default::Default::default();
-                    let mut value = ::std::default::Default::default();
-                    while let Some(tag) = is.read_raw_tag_or_eof()? {
-                        match tag {
-                            10 => key = is.read_string()?,
-                            18 => value = is.read_message()?,
-                            _ => ::protobuf::rt::skip_field_for_tag(tag, is)?,
-                        };
-                    }
-                    is.pop_limit(old_limit);
-                    self.extra.insert(key, value);
                 },
                 tag => {
                     ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
@@ -975,12 +512,22 @@ impl ::protobuf::Message for VerifiableCredential {
         for value in &self.context {
             my_size += ::protobuf::rt::string_size(1, &value);
         };
-        if !self.id.is_empty() {
-            my_size += ::protobuf::rt::string_size(2, &self.id);
+        if let Some(v) = self.id.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
         }
-        for value in &self.types {
-            my_size += ::protobuf::rt::string_size(3, &value);
-        };
+        if let Some(v) = self.credential_type.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.name.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.description.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
         if let Some(v) = self.issuer.as_ref() {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
@@ -989,31 +536,19 @@ impl ::protobuf::Message for VerifiableCredential {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
         }
+        if let Some(v) = self.valid_from.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.valid_until.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
         if let Some(v) = self.credential_status.as_ref() {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
         }
-        if !self.valid_from.is_empty() {
-            my_size += ::protobuf::rt::string_size(7, &self.valid_from);
-        }
-        if !self.valid_until.is_empty() {
-            my_size += ::protobuf::rt::string_size(8, &self.valid_until);
-        }
-        if !self.issuance_date.is_empty() {
-            my_size += ::protobuf::rt::string_size(9, &self.issuance_date);
-        }
-        if !self.expiration_date.is_empty() {
-            my_size += ::protobuf::rt::string_size(10, &self.expiration_date);
-        }
         if let Some(v) = self.credential_schema.as_ref() {
-            let len = v.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
-        }
-        for value in &self.evidence {
-            let len = value.compute_size();
-            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
-        };
-        if let Some(v) = self.terms_of_use.as_ref() {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
         }
@@ -1021,13 +556,6 @@ impl ::protobuf::Message for VerifiableCredential {
             let len = v.compute_size();
             my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
         }
-        for (k, v) in &self.extra {
-            let mut entry_size = 0;
-            entry_size += ::protobuf::rt::string_size(1, &k);
-            let len = v.compute_size();
-            entry_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
-            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(entry_size) + entry_size
-        };
         my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
         self.special_fields.cached_size().set(my_size as u32);
         my_size
@@ -1037,55 +565,39 @@ impl ::protobuf::Message for VerifiableCredential {
         for v in &self.context {
             os.write_string(1, &v)?;
         };
-        if !self.id.is_empty() {
-            os.write_string(2, &self.id)?;
+        if let Some(v) = self.id.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(2, v, os)?;
         }
-        for v in &self.types {
-            os.write_string(3, &v)?;
-        };
-        if let Some(v) = self.issuer.as_ref() {
+        if let Some(v) = self.credential_type.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(3, v, os)?;
+        }
+        if let Some(v) = self.name.as_ref() {
             ::protobuf::rt::write_message_field_with_cached_size(4, v, os)?;
         }
-        if let Some(v) = self.credential_subject.as_ref() {
+        if let Some(v) = self.description.as_ref() {
             ::protobuf::rt::write_message_field_with_cached_size(5, v, os)?;
         }
-        if let Some(v) = self.credential_status.as_ref() {
+        if let Some(v) = self.issuer.as_ref() {
             ::protobuf::rt::write_message_field_with_cached_size(6, v, os)?;
         }
-        if !self.valid_from.is_empty() {
-            os.write_string(7, &self.valid_from)?;
+        if let Some(v) = self.credential_subject.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(7, v, os)?;
         }
-        if !self.valid_until.is_empty() {
-            os.write_string(8, &self.valid_until)?;
+        if let Some(v) = self.valid_from.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(8, v, os)?;
         }
-        if !self.issuance_date.is_empty() {
-            os.write_string(9, &self.issuance_date)?;
+        if let Some(v) = self.valid_until.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(9, v, os)?;
         }
-        if !self.expiration_date.is_empty() {
-            os.write_string(10, &self.expiration_date)?;
+        if let Some(v) = self.credential_status.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(10, v, os)?;
         }
         if let Some(v) = self.credential_schema.as_ref() {
             ::protobuf::rt::write_message_field_with_cached_size(11, v, os)?;
         }
-        for v in &self.evidence {
-            ::protobuf::rt::write_message_field_with_cached_size(12, v, os)?;
-        };
-        if let Some(v) = self.terms_of_use.as_ref() {
-            ::protobuf::rt::write_message_field_with_cached_size(13, v, os)?;
-        }
         if let Some(v) = self.proof.as_ref() {
-            ::protobuf::rt::write_message_field_with_cached_size(14, v, os)?;
+            ::protobuf::rt::write_message_field_with_cached_size(12, v, os)?;
         }
-        for (k, v) in &self.extra {
-            let mut entry_size = 0;
-            entry_size += ::protobuf::rt::string_size(1, &k);
-            let len = v.cached_size() as u64;
-            entry_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
-            os.write_raw_varint32(122)?; // Tag.
-            os.write_raw_varint32(entry_size as u32)?;
-            os.write_string(1, &k)?;
-            ::protobuf::rt::write_message_field_with_cached_size(2, v, os)?;
-        };
         os.write_unknown_fields(self.special_fields.unknown_fields())?;
         ::std::result::Result::Ok(())
     }
@@ -1105,25 +617,36 @@ impl ::protobuf::Message for VerifiableCredential {
     fn clear(&mut self) {
         self.context.clear();
         self.id.clear();
-        self.types.clear();
+        self.credential_type.clear();
+        self.name.clear();
+        self.description.clear();
         self.issuer.clear();
         self.credential_subject.clear();
-        self.credential_status.clear();
         self.valid_from.clear();
         self.valid_until.clear();
-        self.issuance_date.clear();
-        self.expiration_date.clear();
+        self.credential_status.clear();
         self.credential_schema.clear();
-        self.evidence.clear();
-        self.terms_of_use.clear();
         self.proof.clear();
-        self.extra.clear();
         self.special_fields.clear();
     }
 
     fn default_instance() -> &'static VerifiableCredential {
-        static instance: ::protobuf::rt::Lazy<VerifiableCredential> = ::protobuf::rt::Lazy::new();
-        instance.get(VerifiableCredential::new)
+        static instance: VerifiableCredential = VerifiableCredential {
+            context: ::std::vec::Vec::new(),
+            id: ::protobuf::MessageField::none(),
+            credential_type: ::protobuf::MessageField::none(),
+            name: ::protobuf::MessageField::none(),
+            description: ::protobuf::MessageField::none(),
+            issuer: ::protobuf::MessageField::none(),
+            credential_subject: ::protobuf::MessageField::none(),
+            valid_from: ::protobuf::MessageField::none(),
+            valid_until: ::protobuf::MessageField::none(),
+            credential_status: ::protobuf::MessageField::none(),
+            credential_schema: ::protobuf::MessageField::none(),
+            proof: ::protobuf::MessageField::none(),
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
     }
 }
 
@@ -1144,49 +667,869 @@ impl ::protobuf::reflect::ProtobufValue for VerifiableCredential {
     type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
 }
 
+// @@protoc_insertion_point(message:VerifiablePresentation)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct VerifiablePresentation {
+    // message fields
+    // @@protoc_insertion_point(field:VerifiablePresentation.context)
+    pub context: ::std::vec::Vec<::std::string::String>,
+    // @@protoc_insertion_point(field:VerifiablePresentation.id)
+    pub id: ::protobuf::MessageField<::protobuf::well_known_types::wrappers::StringValue>,
+    // @@protoc_insertion_point(field:VerifiablePresentation.presentation_type)
+    pub presentation_type: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
+    // @@protoc_insertion_point(field:VerifiablePresentation.verifiable_credential)
+    pub verifiable_credential: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
+    // @@protoc_insertion_point(field:VerifiablePresentation.holder)
+    pub holder: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
+    // special fields
+    // @@protoc_insertion_point(special_field:VerifiablePresentation.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a VerifiablePresentation {
+    fn default() -> &'a VerifiablePresentation {
+        <VerifiablePresentation as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl VerifiablePresentation {
+    pub fn new() -> VerifiablePresentation {
+        ::std::default::Default::default()
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(5);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_vec_simpler_accessor::<_, _>(
+            "context",
+            |m: &VerifiablePresentation| { &m.context },
+            |m: &mut VerifiablePresentation| { &mut m.context },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::wrappers::StringValue>(
+            "id",
+            |m: &VerifiablePresentation| { &m.id },
+            |m: &mut VerifiablePresentation| { &mut m.id },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
+            "presentation_type",
+            |m: &VerifiablePresentation| { &m.presentation_type },
+            |m: &mut VerifiablePresentation| { &mut m.presentation_type },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
+            "verifiable_credential",
+            |m: &VerifiablePresentation| { &m.verifiable_credential },
+            |m: &mut VerifiablePresentation| { &mut m.verifiable_credential },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
+            "holder",
+            |m: &VerifiablePresentation| { &m.holder },
+            |m: &mut VerifiablePresentation| { &mut m.holder },
+        ));
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<VerifiablePresentation>(
+            "VerifiablePresentation",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for VerifiablePresentation {
+    const NAME: &'static str = "VerifiablePresentation";
+
+    fn is_initialized(&self) -> bool {
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                10 => {
+                    self.context.push(is.read_string()?);
+                },
+                18 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.id)?;
+                },
+                26 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.presentation_type)?;
+                },
+                34 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.verifiable_credential)?;
+                },
+                42 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.holder)?;
+                },
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        for value in &self.context {
+            my_size += ::protobuf::rt::string_size(1, &value);
+        };
+        if let Some(v) = self.id.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.presentation_type.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.verifiable_credential.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.holder.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        for v in &self.context {
+            os.write_string(1, &v)?;
+        };
+        if let Some(v) = self.id.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(2, v, os)?;
+        }
+        if let Some(v) = self.presentation_type.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(3, v, os)?;
+        }
+        if let Some(v) = self.verifiable_credential.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(4, v, os)?;
+        }
+        if let Some(v) = self.holder.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(5, v, os)?;
+        }
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> VerifiablePresentation {
+        VerifiablePresentation::new()
+    }
+
+    fn clear(&mut self) {
+        self.context.clear();
+        self.id.clear();
+        self.presentation_type.clear();
+        self.verifiable_credential.clear();
+        self.holder.clear();
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static VerifiablePresentation {
+        static instance: VerifiablePresentation = VerifiablePresentation {
+            context: ::std::vec::Vec::new(),
+            id: ::protobuf::MessageField::none(),
+            presentation_type: ::protobuf::MessageField::none(),
+            verifiable_credential: ::protobuf::MessageField::none(),
+            holder: ::protobuf::MessageField::none(),
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for VerifiablePresentation {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("VerifiablePresentation").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for VerifiablePresentation {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for VerifiablePresentation {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
+// @@protoc_insertion_point(message:Status)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct Status {
+    // message fields
+    // @@protoc_insertion_point(field:Status.id)
+    pub id: ::protobuf::MessageField<::protobuf::well_known_types::wrappers::StringValue>,
+    // @@protoc_insertion_point(field:Status.status_type)
+    pub status_type: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
+    // special fields
+    // @@protoc_insertion_point(special_field:Status.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a Status {
+    fn default() -> &'a Status {
+        <Status as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl Status {
+    pub fn new() -> Status {
+        ::std::default::Default::default()
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(2);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::wrappers::StringValue>(
+            "id",
+            |m: &Status| { &m.id },
+            |m: &mut Status| { &mut m.id },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
+            "status_type",
+            |m: &Status| { &m.status_type },
+            |m: &mut Status| { &mut m.status_type },
+        ));
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<Status>(
+            "Status",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for Status {
+    const NAME: &'static str = "Status";
+
+    fn is_initialized(&self) -> bool {
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                10 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.id)?;
+                },
+                18 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.status_type)?;
+                },
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        if let Some(v) = self.id.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.status_type.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        if let Some(v) = self.id.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(1, v, os)?;
+        }
+        if let Some(v) = self.status_type.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(2, v, os)?;
+        }
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> Status {
+        Status::new()
+    }
+
+    fn clear(&mut self) {
+        self.id.clear();
+        self.status_type.clear();
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static Status {
+        static instance: Status = Status {
+            id: ::protobuf::MessageField::none(),
+            status_type: ::protobuf::MessageField::none(),
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for Status {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("Status").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for Status {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for Status {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
+// @@protoc_insertion_point(message:CredentialSchema)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct CredentialSchema {
+    // message fields
+    // @@protoc_insertion_point(field:CredentialSchema.id)
+    pub id: ::std::string::String,
+    // @@protoc_insertion_point(field:CredentialSchema.schema_type)
+    pub schema_type: ::std::string::String,
+    // special fields
+    // @@protoc_insertion_point(special_field:CredentialSchema.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a CredentialSchema {
+    fn default() -> &'a CredentialSchema {
+        <CredentialSchema as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl CredentialSchema {
+    pub fn new() -> CredentialSchema {
+        ::std::default::Default::default()
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(2);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "id",
+            |m: &CredentialSchema| { &m.id },
+            |m: &mut CredentialSchema| { &mut m.id },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "schema_type",
+            |m: &CredentialSchema| { &m.schema_type },
+            |m: &mut CredentialSchema| { &mut m.schema_type },
+        ));
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<CredentialSchema>(
+            "CredentialSchema",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for CredentialSchema {
+    const NAME: &'static str = "CredentialSchema";
+
+    fn is_initialized(&self) -> bool {
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                10 => {
+                    self.id = is.read_string()?;
+                },
+                18 => {
+                    self.schema_type = is.read_string()?;
+                },
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        if !self.id.is_empty() {
+            my_size += ::protobuf::rt::string_size(1, &self.id);
+        }
+        if !self.schema_type.is_empty() {
+            my_size += ::protobuf::rt::string_size(2, &self.schema_type);
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        if !self.id.is_empty() {
+            os.write_string(1, &self.id)?;
+        }
+        if !self.schema_type.is_empty() {
+            os.write_string(2, &self.schema_type)?;
+        }
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> CredentialSchema {
+        CredentialSchema::new()
+    }
+
+    fn clear(&mut self) {
+        self.id.clear();
+        self.schema_type.clear();
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static CredentialSchema {
+        static instance: CredentialSchema = CredentialSchema {
+            id: ::std::string::String::new(),
+            schema_type: ::std::string::String::new(),
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for CredentialSchema {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("CredentialSchema").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for CredentialSchema {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for CredentialSchema {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
+// @@protoc_insertion_point(message:Proof)
+#[derive(PartialEq,Clone,Default,Debug)]
+pub struct Proof {
+    // message fields
+    // @@protoc_insertion_point(field:Proof.id)
+    pub id: ::protobuf::MessageField<::protobuf::well_known_types::wrappers::StringValue>,
+    // @@protoc_insertion_point(field:Proof.proof_type)
+    pub proof_type: ::std::string::String,
+    // @@protoc_insertion_point(field:Proof.proof_purpose)
+    pub proof_purpose: ::std::string::String,
+    // @@protoc_insertion_point(field:Proof.verification_method)
+    pub verification_method: ::protobuf::MessageField<::protobuf::well_known_types::wrappers::StringValue>,
+    // @@protoc_insertion_point(field:Proof.cryptosuite)
+    pub cryptosuite: ::protobuf::MessageField<::protobuf::well_known_types::wrappers::StringValue>,
+    // @@protoc_insertion_point(field:Proof.created)
+    pub created: ::protobuf::MessageField<::protobuf::well_known_types::timestamp::Timestamp>,
+    // @@protoc_insertion_point(field:Proof.expires)
+    pub expires: ::protobuf::MessageField<::protobuf::well_known_types::timestamp::Timestamp>,
+    // @@protoc_insertion_point(field:Proof.domain)
+    pub domain: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
+    // @@protoc_insertion_point(field:Proof.challenge)
+    pub challenge: ::protobuf::MessageField<::protobuf::well_known_types::wrappers::StringValue>,
+    // @@protoc_insertion_point(field:Proof.proof_value)
+    pub proof_value: ::std::string::String,
+    // @@protoc_insertion_point(field:Proof.previous_proof)
+    pub previous_proof: ::protobuf::MessageField<::protobuf::well_known_types::wrappers::StringValue>,
+    // @@protoc_insertion_point(field:Proof.nonce)
+    pub nonce: ::protobuf::MessageField<::protobuf::well_known_types::struct_::Value>,
+    // special fields
+    // @@protoc_insertion_point(special_field:Proof.special_fields)
+    pub special_fields: ::protobuf::SpecialFields,
+}
+
+impl<'a> ::std::default::Default for &'a Proof {
+    fn default() -> &'a Proof {
+        <Proof as ::protobuf::Message>::default_instance()
+    }
+}
+
+impl Proof {
+    pub fn new() -> Proof {
+        ::std::default::Default::default()
+    }
+
+    fn generated_message_descriptor_data() -> ::protobuf::reflect::GeneratedMessageDescriptorData {
+        let mut fields = ::std::vec::Vec::with_capacity(12);
+        let mut oneofs = ::std::vec::Vec::with_capacity(0);
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::wrappers::StringValue>(
+            "id",
+            |m: &Proof| { &m.id },
+            |m: &mut Proof| { &mut m.id },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "proof_type",
+            |m: &Proof| { &m.proof_type },
+            |m: &mut Proof| { &mut m.proof_type },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "proof_purpose",
+            |m: &Proof| { &m.proof_purpose },
+            |m: &mut Proof| { &mut m.proof_purpose },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::wrappers::StringValue>(
+            "verification_method",
+            |m: &Proof| { &m.verification_method },
+            |m: &mut Proof| { &mut m.verification_method },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::wrappers::StringValue>(
+            "cryptosuite",
+            |m: &Proof| { &m.cryptosuite },
+            |m: &mut Proof| { &mut m.cryptosuite },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::timestamp::Timestamp>(
+            "created",
+            |m: &Proof| { &m.created },
+            |m: &mut Proof| { &mut m.created },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::timestamp::Timestamp>(
+            "expires",
+            |m: &Proof| { &m.expires },
+            |m: &mut Proof| { &mut m.expires },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
+            "domain",
+            |m: &Proof| { &m.domain },
+            |m: &mut Proof| { &mut m.domain },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::wrappers::StringValue>(
+            "challenge",
+            |m: &Proof| { &m.challenge },
+            |m: &mut Proof| { &mut m.challenge },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_simpler_field_accessor::<_, _>(
+            "proof_value",
+            |m: &Proof| { &m.proof_value },
+            |m: &mut Proof| { &mut m.proof_value },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::wrappers::StringValue>(
+            "previous_proof",
+            |m: &Proof| { &m.previous_proof },
+            |m: &mut Proof| { &mut m.previous_proof },
+        ));
+        fields.push(::protobuf::reflect::rt::v2::make_message_field_accessor::<_, ::protobuf::well_known_types::struct_::Value>(
+            "nonce",
+            |m: &Proof| { &m.nonce },
+            |m: &mut Proof| { &mut m.nonce },
+        ));
+        ::protobuf::reflect::GeneratedMessageDescriptorData::new_2::<Proof>(
+            "Proof",
+            fields,
+            oneofs,
+        )
+    }
+}
+
+impl ::protobuf::Message for Proof {
+    const NAME: &'static str = "Proof";
+
+    fn is_initialized(&self) -> bool {
+        true
+    }
+
+    fn merge_from(&mut self, is: &mut ::protobuf::CodedInputStream<'_>) -> ::protobuf::Result<()> {
+        while let Some(tag) = is.read_raw_tag_or_eof()? {
+            match tag {
+                10 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.id)?;
+                },
+                18 => {
+                    self.proof_type = is.read_string()?;
+                },
+                26 => {
+                    self.proof_purpose = is.read_string()?;
+                },
+                34 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.verification_method)?;
+                },
+                42 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.cryptosuite)?;
+                },
+                50 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.created)?;
+                },
+                58 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.expires)?;
+                },
+                66 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.domain)?;
+                },
+                74 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.challenge)?;
+                },
+                82 => {
+                    self.proof_value = is.read_string()?;
+                },
+                90 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.previous_proof)?;
+                },
+                98 => {
+                    ::protobuf::rt::read_singular_message_into_field(is, &mut self.nonce)?;
+                },
+                tag => {
+                    ::protobuf::rt::read_unknown_or_skip_group(tag, is, self.special_fields.mut_unknown_fields())?;
+                },
+            };
+        }
+        ::std::result::Result::Ok(())
+    }
+
+    // Compute sizes of nested messages
+    #[allow(unused_variables)]
+    fn compute_size(&self) -> u64 {
+        let mut my_size = 0;
+        if let Some(v) = self.id.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if !self.proof_type.is_empty() {
+            my_size += ::protobuf::rt::string_size(2, &self.proof_type);
+        }
+        if !self.proof_purpose.is_empty() {
+            my_size += ::protobuf::rt::string_size(3, &self.proof_purpose);
+        }
+        if let Some(v) = self.verification_method.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.cryptosuite.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.created.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.expires.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.domain.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.challenge.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if !self.proof_value.is_empty() {
+            my_size += ::protobuf::rt::string_size(10, &self.proof_value);
+        }
+        if let Some(v) = self.previous_proof.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        if let Some(v) = self.nonce.as_ref() {
+            let len = v.compute_size();
+            my_size += 1 + ::protobuf::rt::compute_raw_varint64_size(len) + len;
+        }
+        my_size += ::protobuf::rt::unknown_fields_size(self.special_fields.unknown_fields());
+        self.special_fields.cached_size().set(my_size as u32);
+        my_size
+    }
+
+    fn write_to_with_cached_sizes(&self, os: &mut ::protobuf::CodedOutputStream<'_>) -> ::protobuf::Result<()> {
+        if let Some(v) = self.id.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(1, v, os)?;
+        }
+        if !self.proof_type.is_empty() {
+            os.write_string(2, &self.proof_type)?;
+        }
+        if !self.proof_purpose.is_empty() {
+            os.write_string(3, &self.proof_purpose)?;
+        }
+        if let Some(v) = self.verification_method.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(4, v, os)?;
+        }
+        if let Some(v) = self.cryptosuite.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(5, v, os)?;
+        }
+        if let Some(v) = self.created.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(6, v, os)?;
+        }
+        if let Some(v) = self.expires.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(7, v, os)?;
+        }
+        if let Some(v) = self.domain.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(8, v, os)?;
+        }
+        if let Some(v) = self.challenge.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(9, v, os)?;
+        }
+        if !self.proof_value.is_empty() {
+            os.write_string(10, &self.proof_value)?;
+        }
+        if let Some(v) = self.previous_proof.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(11, v, os)?;
+        }
+        if let Some(v) = self.nonce.as_ref() {
+            ::protobuf::rt::write_message_field_with_cached_size(12, v, os)?;
+        }
+        os.write_unknown_fields(self.special_fields.unknown_fields())?;
+        ::std::result::Result::Ok(())
+    }
+
+    fn special_fields(&self) -> &::protobuf::SpecialFields {
+        &self.special_fields
+    }
+
+    fn mut_special_fields(&mut self) -> &mut ::protobuf::SpecialFields {
+        &mut self.special_fields
+    }
+
+    fn new() -> Proof {
+        Proof::new()
+    }
+
+    fn clear(&mut self) {
+        self.id.clear();
+        self.proof_type.clear();
+        self.proof_purpose.clear();
+        self.verification_method.clear();
+        self.cryptosuite.clear();
+        self.created.clear();
+        self.expires.clear();
+        self.domain.clear();
+        self.challenge.clear();
+        self.proof_value.clear();
+        self.previous_proof.clear();
+        self.nonce.clear();
+        self.special_fields.clear();
+    }
+
+    fn default_instance() -> &'static Proof {
+        static instance: Proof = Proof {
+            id: ::protobuf::MessageField::none(),
+            proof_type: ::std::string::String::new(),
+            proof_purpose: ::std::string::String::new(),
+            verification_method: ::protobuf::MessageField::none(),
+            cryptosuite: ::protobuf::MessageField::none(),
+            created: ::protobuf::MessageField::none(),
+            expires: ::protobuf::MessageField::none(),
+            domain: ::protobuf::MessageField::none(),
+            challenge: ::protobuf::MessageField::none(),
+            proof_value: ::std::string::String::new(),
+            previous_proof: ::protobuf::MessageField::none(),
+            nonce: ::protobuf::MessageField::none(),
+            special_fields: ::protobuf::SpecialFields::new(),
+        };
+        &instance
+    }
+}
+
+impl ::protobuf::MessageFull for Proof {
+    fn descriptor() -> ::protobuf::reflect::MessageDescriptor {
+        static descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::MessageDescriptor> = ::protobuf::rt::Lazy::new();
+        descriptor.get(|| file_descriptor().message_by_package_relative_name("Proof").unwrap()).clone()
+    }
+}
+
+impl ::std::fmt::Display for Proof {
+    fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
+        ::protobuf::text_format::fmt(self, f)
+    }
+}
+
+impl ::protobuf::reflect::ProtobufValue for Proof {
+    type RuntimeType = ::protobuf::reflect::rt::RuntimeTypeMessage<Self>;
+}
+
 static file_descriptor_proto_data: &'static [u8] = b"\
-    \n\x08vc.proto\x12\x20verifiable_credential_toolkit.v1\x1a\x1cgoogle/pro\
-    tobuf/struct.proto\"\x96\x02\n\x05Proof\x12\x12\n\x04type\x18\x01\x20\
-    \x01(\tR\x04type\x12\x18\n\x07created\x18\x02\x20\x01(\tR\x07created\x12\
-    /\n\x13verification_method\x18\x03\x20\x01(\tR\x12verificationMethod\x12\
-    #\n\rproof_purpose\x18\x04\x20\x01(\tR\x0cproofPurpose\x12\x20\n\x0bcryp\
-    tosuite\x18\x05\x20\x01(\tR\x0bcryptosuite\x12\x1f\n\x0bproof_value\x18\
-    \x06\x20\x01(\tR\nproofValue\x12\x10\n\x03jws\x18\x07\x20\x01(\tR\x03jws\
-    \x12\x1c\n\tchallenge\x18\x08\x20\x01(\tR\tchallenge\x12\x16\n\x06domain\
-    \x18\t\x20\x01(\tR\x06domain\"J\n\tProofList\x12=\n\x05items\x18\x01\x20\
-    \x03(\x0b2'.verifiable_credential_toolkit.v1.ProofR\x05items\"\xdb\x04\n\
-    \x1cUnsignedVerifiableCredential\x12\x19\n\x07context\x18\x01\x20\x03(\t\
-    R\x08@context\x12\x0e\n\x02id\x18\x02\x20\x01(\tR\x02id\x12\x13\n\x05typ\
-    es\x18\x03\x20\x03(\tR\x04type\x12.\n\x06issuer\x18\x04\x20\x01(\x0b2\
-    \x16.google.protobuf.ValueR\x06issuer\x12E\n\x12credential_subject\x18\
-    \x05\x20\x01(\x0b2\x16.google.protobuf.ValueR\x11credentialSubject\x12C\
-    \n\x11credential_status\x18\x06\x20\x01(\x0b2\x16.google.protobuf.ValueR\
-    \x10credentialStatus\x12\x1d\n\nvalid_from\x18\x07\x20\x01(\tR\tvalidFro\
-    m\x12\x1f\n\x0bvalid_until\x18\x08\x20\x01(\tR\nvalidUntil\x12#\n\rissua\
-    nce_date\x18\t\x20\x01(\tR\x0cissuanceDate\x12'\n\x0fexpiration_date\x18\
-    \n\x20\x01(\tR\x0eexpirationDate\x12C\n\x11credential_schema\x18\x0b\x20\
-    \x01(\x0b2\x16.google.protobuf.ValueR\x10credentialSchema\x122\n\x08evid\
-    ence\x18\x0c\x20\x03(\x0b2\x16.google.protobuf.ValueR\x08evidence\x128\n\
-    \x0cterms_of_use\x18\r\x20\x01(\x0b2\x16.google.protobuf.ValueR\ntermsOf\
-    Use\"\xbd\x06\n\x14VerifiableCredential\x12\x19\n\x07context\x18\x01\x20\
-    \x03(\tR\x08@context\x12\x0e\n\x02id\x18\x02\x20\x01(\tR\x02id\x12\x13\n\
-    \x05types\x18\x03\x20\x03(\tR\x04type\x12.\n\x06issuer\x18\x04\x20\x01(\
+    \n\x08vc.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobu\
+    f/timestamp.proto\x1a\x1egoogle/protobuf/wrappers.proto\"\xee\x04\n\x1cU\
+    nsignedVerifiableCredential\x12\x19\n\x07context\x18\x01\x20\x03(\tR\x08\
+    @context\x12,\n\x02id\x18\x02\x20\x01(\x0b2\x1c.google.protobuf.StringVa\
+    lueR\x02id\x125\n\x0fcredential_type\x18\x03\x20\x01(\x0b2\x16.google.pr\
+    otobuf.ValueR\x04type\x12*\n\x04name\x18\x04\x20\x01(\x0b2\x16.google.pr\
+    otobuf.ValueR\x04name\x128\n\x0bdescription\x18\x05\x20\x01(\x0b2\x16.go\
+    ogle.protobuf.ValueR\x0bdescription\x12.\n\x06issuer\x18\x06\x20\x01(\
     \x0b2\x16.google.protobuf.ValueR\x06issuer\x12E\n\x12credential_subject\
-    \x18\x05\x20\x01(\x0b2\x16.google.protobuf.ValueR\x11credentialSubject\
-    \x12C\n\x11credential_status\x18\x06\x20\x01(\x0b2\x16.google.protobuf.V\
-    alueR\x10credentialStatus\x12\x1d\n\nvalid_from\x18\x07\x20\x01(\tR\tval\
-    idFrom\x12\x1f\n\x0bvalid_until\x18\x08\x20\x01(\tR\nvalidUntil\x12#\n\r\
-    issuance_date\x18\t\x20\x01(\tR\x0cissuanceDate\x12'\n\x0fexpiration_dat\
-    e\x18\n\x20\x01(\tR\x0eexpirationDate\x12C\n\x11credential_schema\x18\
-    \x0b\x20\x01(\x0b2\x16.google.protobuf.ValueR\x10credentialSchema\x122\n\
-    \x08evidence\x18\x0c\x20\x03(\x0b2\x16.google.protobuf.ValueR\x08evidenc\
-    e\x128\n\x0cterms_of_use\x18\r\x20\x01(\x0b2\x16.google.protobuf.ValueR\
-    \ntermsOfUse\x12=\n\x05proof\x18\x0e\x20\x01(\x0b2'.verifiable_credentia\
-    l_toolkit.v1.ProofR\x05proof\x12W\n\x05extra\x18\x0f\x20\x03(\x0b2A.veri\
-    fiable_credential_toolkit.v1.VerifiableCredential.ExtraEntryR\x05extra\
-    \x1aP\n\nExtraEntry\x12\x10\n\x03key\x18\x01\x20\x01(\tR\x03key\x12,\n\
-    \x05value\x18\x02\x20\x01(\x0b2\x16.google.protobuf.ValueR\x05value:\x02\
-    8\x01b\x06proto3\
+    \x18\x07\x20\x01(\x0b2\x16.google.protobuf.ValueR\x11credentialSubject\
+    \x129\n\nvalid_from\x18\x08\x20\x01(\x0b2\x1a.google.protobuf.TimestampR\
+    \tvalidFrom\x12;\n\x0bvalid_until\x18\t\x20\x01(\x0b2\x1a.google.protobu\
+    f.TimestampR\nvalidUntil\x124\n\x11credential_status\x18\n\x20\x01(\x0b2\
+    \x07.StatusR\x10credentialStatus\x12C\n\x11credential_schema\x18\x0b\x20\
+    \x01(\x0b2\x16.google.protobuf.ValueR\x10credentialSchema\"\x84\x05\n\
+    \x14VerifiableCredential\x12\x19\n\x07context\x18\x01\x20\x03(\tR\x08@co\
+    ntext\x12,\n\x02id\x18\x02\x20\x01(\x0b2\x1c.google.protobuf.StringValue\
+    R\x02id\x125\n\x0fcredential_type\x18\x03\x20\x01(\x0b2\x16.google.proto\
+    buf.ValueR\x04type\x12*\n\x04name\x18\x04\x20\x01(\x0b2\x16.google.proto\
+    buf.ValueR\x04name\x128\n\x0bdescription\x18\x05\x20\x01(\x0b2\x16.googl\
+    e.protobuf.ValueR\x0bdescription\x12.\n\x06issuer\x18\x06\x20\x01(\x0b2\
+    \x16.google.protobuf.ValueR\x06issuer\x12E\n\x12credential_subject\x18\
+    \x07\x20\x01(\x0b2\x16.google.protobuf.ValueR\x11credentialSubject\x129\
+    \n\nvalid_from\x18\x08\x20\x01(\x0b2\x1a.google.protobuf.TimestampR\tval\
+    idFrom\x12;\n\x0bvalid_until\x18\t\x20\x01(\x0b2\x1a.google.protobuf.Tim\
+    estampR\nvalidUntil\x124\n\x11credential_status\x18\n\x20\x01(\x0b2\x07.\
+    StatusR\x10credentialStatus\x12C\n\x11credential_schema\x18\x0b\x20\x01(\
+    \x0b2\x16.google.protobuf.ValueR\x10credentialSchema\x12\x1c\n\x05proof\
+    \x18\x0c\x20\x01(\x0b2\x06.ProofR\x05proof\"\x97\x02\n\x16VerifiablePres\
+    entation\x12\x19\n\x07context\x18\x01\x20\x03(\tR\x08@context\x12,\n\x02\
+    id\x18\x02\x20\x01(\x0b2\x1c.google.protobuf.StringValueR\x02id\x127\n\
+    \x11presentation_type\x18\x03\x20\x01(\x0b2\x16.google.protobuf.ValueR\
+    \x04type\x12K\n\x15verifiable_credential\x18\x04\x20\x01(\x0b2\x16.googl\
+    e.protobuf.ValueR\x14verifiableCredential\x12.\n\x06holder\x18\x05\x20\
+    \x01(\x0b2\x16.google.protobuf.ValueR\x06holder\"i\n\x06Status\x12,\n\
+    \x02id\x18\x01\x20\x01(\x0b2\x1c.google.protobuf.StringValueR\x02id\x121\
+    \n\x0bstatus_type\x18\x02\x20\x01(\x0b2\x16.google.protobuf.ValueR\x04ty\
+    pe\"=\n\x10CredentialSchema\x12\x0e\n\x02id\x18\x01\x20\x01(\tR\x02id\
+    \x12\x19\n\x0bschema_type\x18\x02\x20\x01(\tR\x04type\"\xef\x04\n\x05Pro\
+    of\x12,\n\x02id\x18\x01\x20\x01(\x0b2\x1c.google.protobuf.StringValueR\
+    \x02id\x12\x18\n\nproof_type\x18\x02\x20\x01(\tR\x04type\x12#\n\rproof_p\
+    urpose\x18\x03\x20\x01(\tR\x0cproofPurpose\x12M\n\x13verification_method\
+    \x18\x04\x20\x01(\x0b2\x1c.google.protobuf.StringValueR\x12verificationM\
+    ethod\x12>\n\x0bcryptosuite\x18\x05\x20\x01(\x0b2\x1c.google.protobuf.St\
+    ringValueR\x0bcryptosuite\x124\n\x07created\x18\x06\x20\x01(\x0b2\x1a.go\
+    ogle.protobuf.TimestampR\x07created\x124\n\x07expires\x18\x07\x20\x01(\
+    \x0b2\x1a.google.protobuf.TimestampR\x07expires\x12.\n\x06domain\x18\x08\
+    \x20\x01(\x0b2\x16.google.protobuf.ValueR\x06domain\x12:\n\tchallenge\
+    \x18\t\x20\x01(\x0b2\x1c.google.protobuf.StringValueR\tchallenge\x12\x1f\
+    \n\x0bproof_value\x18\n\x20\x01(\tR\nproofValue\x12C\n\x0eprevious_proof\
+    \x18\x0b\x20\x01(\x0b2\x1c.google.protobuf.StringValueR\rpreviousProof\
+    \x12,\n\x05nonce\x18\x0c\x20\x01(\x0b2\x16.google.protobuf.ValueR\x05non\
+    ceb\x06proto3\
 ";
 
 /// `FileDescriptorProto` object which was a source for this generated file
@@ -1203,13 +1546,17 @@ pub fn file_descriptor() -> &'static ::protobuf::reflect::FileDescriptor {
     static file_descriptor: ::protobuf::rt::Lazy<::protobuf::reflect::FileDescriptor> = ::protobuf::rt::Lazy::new();
     file_descriptor.get(|| {
         let generated_file_descriptor = generated_file_descriptor_lazy.get(|| {
-            let mut deps = ::std::vec::Vec::with_capacity(1);
+            let mut deps = ::std::vec::Vec::with_capacity(3);
             deps.push(::protobuf::well_known_types::struct_::file_descriptor().clone());
-            let mut messages = ::std::vec::Vec::with_capacity(4);
-            messages.push(Proof::generated_message_descriptor_data());
-            messages.push(ProofList::generated_message_descriptor_data());
+            deps.push(::protobuf::well_known_types::timestamp::file_descriptor().clone());
+            deps.push(::protobuf::well_known_types::wrappers::file_descriptor().clone());
+            let mut messages = ::std::vec::Vec::with_capacity(6);
             messages.push(UnsignedVerifiableCredential::generated_message_descriptor_data());
             messages.push(VerifiableCredential::generated_message_descriptor_data());
+            messages.push(VerifiablePresentation::generated_message_descriptor_data());
+            messages.push(Status::generated_message_descriptor_data());
+            messages.push(CredentialSchema::generated_message_descriptor_data());
+            messages.push(Proof::generated_message_descriptor_data());
             let mut enums = ::std::vec::Vec::with_capacity(0);
             ::protobuf::reflect::GeneratedFileDescriptor::new_generated(
                 file_descriptor_proto(),

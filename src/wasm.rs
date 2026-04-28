@@ -199,7 +199,7 @@ pub fn sign_protobuf_vc(
 }
 
 #[wasm_bindgen]
-pub fn verify_protobuf_vc(signed_vc_protobuf: &[u8], public_key: &[u8]) -> Result<(), JsError> {
+pub fn verify_protobuf_vc(signed_vc_protobuf: &[u8], public_key: &[u8]) -> Result<bool, JsError> {
     crate::bindings::protobuf::verify_protobuf_vc(signed_vc_protobuf, public_key)
         .map_err(|e| JsError::new(&format!("Protobuf verification failed: {}", e)))
 }
@@ -213,7 +213,7 @@ pub fn sign_cbor_vc(unsigned_vc_cbor: &[u8], private_key: &[u8]) -> Result<Vec<u
 }
 
 #[wasm_bindgen]
-pub fn verify_cbor_vc(signed_vc_cbor: &[u8], public_key: &[u8]) -> Result<(), JsError> {
+pub fn verify_cbor_vc(signed_vc_cbor: &[u8], public_key: &[u8]) -> Result<bool, JsError> {
     crate::bindings::cbor::verify_cbor_vc(signed_vc_cbor, public_key)
         .map_err(|e| JsError::new(&format!("CBOR verification failed: {}", e)))
 }
