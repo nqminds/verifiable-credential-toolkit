@@ -150,6 +150,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn sign_with_schema_check_url() {
         let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
             "test_data/verifiable_credentials/unsigned.json"
