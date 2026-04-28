@@ -41,9 +41,65 @@ pub fn decode_signed_vc_from_protobuf(bytes: &[u8]) -> ProtoResult<ProtobufVerif
         .map_err(|e| format!("invalid protobuf: {e}"))
 }
 
+/// Normalize a JSON representation of a `VerifiableCredential` so that
+/// `protobuf_json_mapping::parse_from_str` can consume it.
+///
+/// Two issues are addressed:
+///
+/// 1. **`null` values** — `serde_json` serialises `Option::None` fields as
+///    JSON `null` when `skip_serializing_if` is not set.
+///    `protobuf_json_mapping` rejects `null` for wrapper types such as
+///    `google.protobuf.StringValue`, so null-valued keys are stripped from
+///    the VC object and the nested `proof` object.
+///
+/// 2. **Single-element `OneOrMany` fields collapsed to bare strings** —
+///    `serde_with::OneOrMany<_, PreferOne>` collapses a single-element `Vec`
+///    to a bare JSON string.  `protobuf_json_mapping` cannot parse a bare
+///    string for a `google.protobuf.Value` field.
+///    At the VC top level, `"type"` is wrapped back to an array.
+///    Inside `"proof"`, `"domain"` and `"nonce"` are wrapped similarly.
+///    No other nested fields are touched to avoid corrupting fields like
+///    `credentialSchema.type` which carry an intentional plain string value.
+fn normalize_for_protobuf(vc_json: &mut serde_json::Value) {
+    let Some(obj) = vc_json.as_object_mut() else {
+        return;
+    };
+
+    // 1. Strip null-valued top-level keys.
+    obj.retain(|_, v| !v.is_null());
+
+    // 2. Wrap top-level OneOrMany string fields to single-element arrays.
+    for key in ["type"] {
+        if let Some(field) = obj.get_mut(key) {
+            if field.is_string() {
+                let s = field.as_str().unwrap().to_string();
+                *field = serde_json::Value::Array(vec![serde_json::Value::String(s)]);
+            }
+        }
+    }
+
+    // 3. Recurse into `proof` only: strip nulls and wrap its OneOrMany fields.
+    if let Some(proof) = obj.get_mut("proof") {
+        if let Some(proof_obj) = proof.as_object_mut() {
+            proof_obj.retain(|_, v| !v.is_null());
+            for key in ["domain", "nonce"] {
+                if let Some(field) = proof_obj.get_mut(key) {
+                    if field.is_string() {
+                        let s = field.as_str().unwrap().to_string();
+                        *field = serde_json::Value::Array(vec![serde_json::Value::String(s)]);
+                    }
+                }
+            }
+        }
+    }
+}
+
 /// Encode the existing signed VC Rust struct into protobuf bytes.
 pub fn encode_signed_vc_to_protobuf(vc: &VerifiableCredential) -> ProtoResult<Vec<u8>> {
-    let json = serde_json::to_string(vc)
+    let mut json_value = serde_json::to_value(vc)
+        .map_err(|e| format!("VerifiableCredential->json conversion failed: {e}"))?;
+    normalize_for_protobuf(&mut json_value);
+    let json = serde_json::to_string(&json_value)
         .map_err(|e| format!("VerifiableCredential->json conversion failed: {e}"))?;
 
     let protobuf: ProtobufVerifiableCredential =
