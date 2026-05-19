@@ -130,6 +130,11 @@ Or install directly from GitHub:
 verifiable-credential-toolkit = { git = "https://github.com/nqminds/verifiable-credential-toolkit" }
 ```
 
+The protobuf Rust bindings are generated automatically at build time from
+`src/proto_schemas/vc.proto` into Cargo's build output directory, so the generated
+`.rs` files do not need to be committed. `protoc` is supplied by the vendored
+build dependency used in `build.rs`.
+
 ### As a WASM/JavaScript package
 
 You need the `wasm32-unknown-unknown` Rust target and the [`wasm-bindgen-cli`](https://github.com/wasm-bindgen/wasm-bindgen#----guide-main-branch----------api-docs----------contributing----------chat--) tool:
