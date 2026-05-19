@@ -7,74 +7,58 @@ use protobuf_json_mapping::{
     parse_from_str as json_to_protobuf, print_to_string as protobuf_to_json,
 };
 
-pub type ProtoResult<T> = Result<T, String>;
+pub type ProtoResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 fn protobuf_signed_to_domain(
     protobuf: ProtobufVerifiableCredential,
 ) -> ProtoResult<VerifiableCredential> {
-    let json = protobuf_to_json(&protobuf)
-        .map_err(|e| format!("protobuf->json conversion failed: {e}"))?;
-    serde_json::from_str::<VerifiableCredential>(&json)
-        .map_err(|e| format!("json->VerifiableCredential conversion failed: {e}"))
+    let json = protobuf_to_json(&protobuf)?;
+    Ok(serde_json::from_str::<VerifiableCredential>(&json)?)
 }
 
 fn protobuf_unsigned_to_domain(
     protobuf: ProtobufUnsignedVerifiableCredential,
 ) -> ProtoResult<UnsignedVerifiableCredential> {
-    let json = protobuf_to_json(&protobuf)
-        .map_err(|e| format!("protobuf->json conversion failed: {e}"))?;
-    serde_json::from_str::<UnsignedVerifiableCredential>(&json)
-        .map_err(|e| format!("json->UnsignedVerifiableCredential conversion failed: {e}"))
+    let json = protobuf_to_json(&protobuf)?;
+    Ok(serde_json::from_str::<UnsignedVerifiableCredential>(&json)?)
 }
 
 /// Decode protobuf bytes into the protobuf-generated unsigned VC struct.
 pub fn decode_unsigned_vc_from_protobuf(
     bytes: &[u8],
 ) -> ProtoResult<ProtobufUnsignedVerifiableCredential> {
-    ProtobufUnsignedVerifiableCredential::parse_from_bytes(bytes)
-        .map_err(|e| format!("invalid protobuf: {e}"))
+    Ok(ProtobufUnsignedVerifiableCredential::parse_from_bytes(
+        bytes,
+    )?)
 }
 
 /// Decode protobuf bytes into the protobuf-generated signed VC struct.
 pub fn decode_signed_vc_from_protobuf(bytes: &[u8]) -> ProtoResult<ProtobufVerifiableCredential> {
-    ProtobufVerifiableCredential::parse_from_bytes(bytes)
-        .map_err(|e| format!("invalid protobuf: {e}"))
+    Ok(ProtobufVerifiableCredential::parse_from_bytes(bytes)?)
 }
 
 /// Encode the existing signed VC Rust struct into protobuf bytes.
 pub fn encode_signed_vc_to_protobuf(vc: &VerifiableCredential) -> ProtoResult<Vec<u8>> {
-    let json = serde_json::to_string(vc)
-        .map_err(|e| format!("VerifiableCredential->json conversion failed: {e}"))?;
-
-    let protobuf: ProtobufVerifiableCredential =
-        json_to_protobuf(&json).map_err(|e| format!("json->protobuf conversion failed: {e}"))?;
-
-    protobuf
-        .write_to_bytes()
-        .map_err(|e| format!("protobuf serialization failed: {e}"))
+    let json = serde_json::to_string(vc)?;
+    let protobuf: ProtobufVerifiableCredential = json_to_protobuf(&json)?;
+    Ok(protobuf.write_to_bytes()?)
 }
 
 /// Convenience wrapper: decode unsigned VC protobuf, sign with existing JSON-path logic, re-encode as protobuf.
 pub fn sign_protobuf_vc(unsigned_vc_protobuf: &[u8], private_key: &[u8]) -> ProtoResult<Vec<u8>> {
-    let signed_vc = {
-        let unsigned_vc = decode_unsigned_vc_from_protobuf(unsigned_vc_protobuf)?;
-        let unsigned_vc2 = protobuf_unsigned_to_domain(unsigned_vc);
-        unsigned_vc2?.sign(private_key)
-    };
-    match signed_vc {
-        Ok(vc) => encode_signed_vc_to_protobuf(&vc),
-        Err(e) => Err(format!("signing failed: {e}")),
-    }
+    let protobuf_unsigned = decode_unsigned_vc_from_protobuf(unsigned_vc_protobuf)?;
+    let domain_unsigned = protobuf_unsigned_to_domain(protobuf_unsigned)?;
+    let signed = domain_unsigned.sign(private_key)?;
+    encode_signed_vc_to_protobuf(&signed)
 }
 
 /// Convenience wrapper: decode signed VC protobuf and verify with existing JSON-path logic.
 pub fn verify_protobuf_vc(signed_vc_protobuf: &[u8], public_key: &[u8]) -> ProtoResult<()> {
     let signed_vc = decode_signed_vc_from_protobuf(signed_vc_protobuf)?;
     let signed_vc2 = protobuf_signed_to_domain(signed_vc)?;
-    signed_vc2
-        .verify(public_key)
-        .map_err(|e| format!("verification failed: {e}"))
+    signed_vc2.verify(public_key)
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
