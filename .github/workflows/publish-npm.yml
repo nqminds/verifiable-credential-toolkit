@@ -27,6 +27,9 @@ jobs:
       - name: Build WASM package (Node.js target)
         run: wasm-pack build --target nodejs --out-dir pkg
 
+      - name: Copy TypeScript declarations
+        run: cp verifiable_credential_toolkit.d.ts pkg/verifiable_credential_toolkit.d.ts
+
       - name: Publish to npm
         working-directory: pkg
         run: npm publish --access public
