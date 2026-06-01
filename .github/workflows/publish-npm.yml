@@ -32,6 +32,8 @@ jobs:
 
       - name: Publish to npm
         working-directory: pkg
-        run: npm publish --access public
+        run: |
+          npm set //registry.npmjs.org/:_authToken=$NODE_AUTH_TOKEN
+          npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
