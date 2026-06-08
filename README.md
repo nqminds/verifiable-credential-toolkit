@@ -304,8 +304,12 @@ match signed_vc.verify(&public_key) {
 
 You can validate the `credentialSubject` against a JSON Schema before signing, ensuring the data conforms to an agreed-upon structure:
 
+Schema validation is a separate, composable step: call `validate` with a
+`SchemaSource`, then `sign`. This keeps a single signing path regardless of where
+the schema comes from.
+
 ```rust
-use verifiable_credential_toolkit::UnsignedVerifiableCredential;
+use verifiable_credential_toolkit::{SchemaSource, UnsignedVerifiableCredential};
 
 let unsigned_vc: UnsignedVerifiableCredential =
     serde_json::from_str(&std::fs::read_to_string("credential.json").unwrap()).unwrap();
@@ -315,18 +319,21 @@ let private_key = std::fs::read("issuer.priv").unwrap();
 let schema: serde_json::Value =
     serde_json::from_str(&std::fs::read_to_string("device_schema.json").unwrap()).unwrap();
 
-// Sign with schema validation — fails if credentialSubject doesn't match the schema
-let signed_vc = unsigned_vc
-    .sign_with_schema_check(&private_key, &schema)
-    .expect("Schema validation or signing failed");
+// Validate then sign — validate fails if credentialSubject doesn't match the schema
+unsigned_vc
+    .validate(&SchemaSource::Inline(&schema))
+    .expect("Schema validation failed");
+let signed_vc = unsigned_vc.sign(&private_key).expect("Signing failed");
 ```
 
-You can also fetch a schema from a URL at signing time (native Rust only, not available in WASM):
+`SchemaSource` can also fetch a schema from a URL at validation time (native Rust
+only — the `Url` variant is not available in WASM):
 
 ```rust
-let signed_vc = unsigned_vc
-    .sign_with_schema_check_from_url(&private_key, "https://example.com/schemas/device.json")
-    .expect("Failed to fetch schema or sign");
+unsigned_vc
+    .validate(&SchemaSource::Url("https://example.com/schemas/device.json"))
+    .expect("Failed to fetch schema or validate");
+let signed_vc = unsigned_vc.sign(&private_key).expect("Signing failed");
 ```
 
 #### Customise the Proof
@@ -639,12 +646,13 @@ class KeyPair {
 | Function / Method                                                                                                | Description                                                                 |
 | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
 | `generate_keypair() → ([u8; 32], [u8; 32])`                                                                      | Generate a new Ed25519 keypair (private, public)                            |
-| `UnsignedVerifiableCredential::sign(private_key) → Result<VerifiableCredential>`                                 | Sign a credential                                                           |
-| `UnsignedVerifiableCredential::sign_with_schema_check(private_key, schema) → Result<VerifiableCredential>`       | Validate `credentialSubject` against a JSON Schema, then sign               |
-| `UnsignedVerifiableCredential::sign_with_schema_check_from_url(private_key, url) → Result<VerifiableCredential>` | Fetch a JSON Schema from a URL, validate, then sign (not available in WASM) |
+| `UnsignedVerifiableCredential::validate(&SchemaSource) → Result<()>`                                             | Validate `credentialSubject` against a `SchemaSource` (`None` / `Inline` / `Url`) |
+| `UnsignedVerifiableCredential::sign(private_key) → Result<VerifiableCredential>`                                 | Sign a credential (call `validate` first for schema checks)                 |
+| `VerifiableCredential::validate(&SchemaSource) → Result<()>`                                                     | Validate the embedded `credentialSubject` against a `SchemaSource`          |
 | `VerifiableCredential::verify(public_key) → Result<()>`                                                          | Verify signature and check validity period                                  |
-| `VerifiableCredential::verify_with_schema_check(public_key, schema) → Result<()>`                                | Verify signature, check validity, and validate against schema               |
 | `VerifiableCredential::to_unsigned() → UnsignedVerifiableCredential`                                             | Strip the proof to get back an unsigned credential                          |
+
+`SchemaSource` selects where the JSON Schema comes from: `SchemaSource::None`, `SchemaSource::Inline(&Value)`, or `SchemaSource::Url(&str)` (native only). To validate and sign in one expression: `vc.validate(&schema).and_then(|()| vc.sign(key))`.
 
 ### WASM/JavaScript API
 
@@ -687,7 +695,7 @@ Example schema for a device credential:
 }
 ```
 
-When you use `sign_with_schema_check` or `verify_with_schema_check`, the `credentialSubject` is validated against this schema. If it doesn't match the required structure, the operation returns an error.
+When you call `validate` with a `SchemaSource` (in Rust) or use `verify_with_schema_check` (in WASM/JavaScript), the `credentialSubject` is validated against this schema. If it doesn't match the required structure, the operation returns an error.
 
 ---
 

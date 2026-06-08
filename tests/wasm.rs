@@ -3,7 +3,7 @@ mod wasm_tests {
     use chrono::{DateTime, Duration, Utc};
     use url::Url;
     use verifiable_credential_toolkit::{
-        UnsignedVerifiableCredential, VerifiableCredential, VerifiablePresentation,
+        SchemaSource, UnsignedVerifiableCredential, VerifiableCredential, VerifiablePresentation,
     };
     use wasm_bindgen_test::*;
 
@@ -94,7 +94,8 @@ mod wasm_tests {
             serde_json::from_str(schema_str).expect("Failed to parse schema JSON");
 
         let signed_vc = vc
-            .sign_with_schema_check(private_key, &schema)
+            .validate(&SchemaSource::Inline(&schema))
+            .and_then(|()| vc.sign(private_key))
             .expect("Failed to sign VC");
 
         assert!(serde_json::to_string(&signed_vc).is_ok());
@@ -113,7 +114,9 @@ mod wasm_tests {
         let schema: serde_json::Value =
             serde_json::from_str(schema_str).expect("Failed to parse schema JSON");
 
-        let signed_vc = vc.sign_with_schema_check(private_key, &schema);
+        let signed_vc = vc
+            .validate(&SchemaSource::Inline(&schema))
+            .and_then(|()| vc.sign(private_key));
 
         assert!(signed_vc.is_err());
     }

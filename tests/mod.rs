@@ -3,7 +3,7 @@ mod tests {
     use chrono::{DateTime, Duration, Utc};
     use url::Url;
     use verifiable_credential_toolkit::{
-        UnsignedVerifiableCredential, VerifiableCredential, VerifiablePresentation,
+        SchemaSource, UnsignedVerifiableCredential, VerifiableCredential, VerifiablePresentation,
     };
 
     /// Test that a valid Verifiable Credential can be deserialized
@@ -97,7 +97,8 @@ mod tests {
             serde_json::from_str(schema_str).expect("Failed to parse schema JSON");
 
         let signed_vc = vc
-            .sign_with_schema_check(private_key, &schema)
+            .validate(&SchemaSource::Inline(&schema))
+            .and_then(|()| vc.sign(private_key))
             .expect("Failed to sign VC");
 
         assert!(serde_json::to_string(&signed_vc).is_ok());
@@ -117,7 +118,9 @@ mod tests {
         let schema: serde_json::Value =
             serde_json::from_str(schema_str).expect("Failed to parse schema JSON");
 
-        let signed_vc = vc.sign_with_schema_check(private_key, &schema);
+        let signed_vc = vc
+            .validate(&SchemaSource::Inline(&schema))
+            .and_then(|()| vc.sign(private_key));
 
         assert!(signed_vc.is_err());
     }
@@ -161,7 +164,8 @@ mod tests {
             .expect("Error reading private key from file");
 
         let signed_vc = vc
-            .sign_with_schema_check_from_url(private_key, "https://json.schemastore.org/any.json")
+            .validate(&SchemaSource::Url("https://json.schemastore.org/any.json"))
+            .and_then(|()| vc.sign(private_key))
             .expect("Failed to sign VC");
 
         assert!(serde_json::to_string(&signed_vc).is_ok());
@@ -177,10 +181,11 @@ mod tests {
         let private_key: &[u8] = &std::fs::read("tests/test_data/keys/key.priv")
             .expect("Error reading private key from file");
 
-        let signed_vc = vc.sign_with_schema_check_from_url(
-            private_key,
-            "http://localhost:8000/DoesNotExist.json",
-        );
+        let signed_vc = vc
+            .validate(&SchemaSource::Url(
+                "http://localhost:8000/DoesNotExist.json",
+            ))
+            .and_then(|()| vc.sign(private_key));
 
         assert!(signed_vc.is_err());
     }
@@ -423,7 +428,9 @@ mod tests {
         let schema: serde_json::Value =
             serde_json::from_str(schema_str).expect("Failed to parse schema JSON");
 
-        let verify_result = vc.verify_with_schema_check(&public_key, &schema);
+        let verify_result = vc
+            .validate(&SchemaSource::Inline(&schema))
+            .and_then(|()| vc.verify(&public_key));
 
         assert!(verify_result.is_ok());
     }
@@ -446,7 +453,9 @@ mod tests {
         let schema: serde_json::Value =
             serde_json::from_str(schema_str).expect("Failed to parse schema JSON");
 
-        let verify_result = vc.verify_with_schema_check(&public_key, &schema);
+        let verify_result = vc
+            .validate(&SchemaSource::Inline(&schema))
+            .and_then(|()| vc.verify(&public_key));
 
         assert!(verify_result.is_err());
     }

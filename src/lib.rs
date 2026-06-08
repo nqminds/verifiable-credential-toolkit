@@ -187,6 +187,24 @@ pub struct Proof {
 }
 
 impl Proof {
+    /// Construct a default Ed25519 proof carrying the given base64-encoded `proofValue`.
+    fn new_ed25519(proof_value: String) -> Self {
+        Proof {
+            id: None,
+            proof_type: "Ed25519Signature2018".to_string(),
+            proof_purpose: "assertionMethod".to_string(),
+            verification_method: None,
+            cryptosuite: None,
+            created: None,
+            expires: None,
+            domain: None,
+            challenge: None,
+            proof_value,
+            previous_proof: None,
+            nonce: None,
+        }
+    }
+
     /// Set the ID of the proof
     pub fn set_id(mut self, id: Url) -> Self {
         self.id = Some(id);
@@ -254,141 +272,90 @@ impl Proof {
     }
 }
 
+/// Where a JSON Schema used to validate a credential's `credentialSubject` comes from.
+///
+/// Passing this to [UnsignedVerifiableCredential::validate] /
+/// [VerifiableCredential::validate] keeps schema validation a separate, composable
+/// step from signing and verification, rather than spawning a method per schema source.
+#[derive(Debug, Clone)]
+pub enum SchemaSource<'a> {
+    /// Do not perform any schema validation.
+    None,
+    /// Validate against an in-memory JSON Schema document.
+    Inline(&'a Value),
+    /// Fetch the JSON Schema from a URL, then validate. Not available on `wasm32`.
+    #[cfg(not(target_arch = "wasm32"))]
+    Url(&'a str),
+}
+
+impl SchemaSource<'_> {
+    /// Resolve the schema to a concrete JSON document, fetching it over HTTP if necessary.
+    /// Returns `None` when no validation is requested.
+    fn resolve(&self) -> Result<Option<Value>, Box<dyn std::error::Error>> {
+        match self {
+            SchemaSource::None => Ok(None),
+            SchemaSource::Inline(schema) => Ok(Some(Value::clone(schema))),
+            #[cfg(not(target_arch = "wasm32"))]
+            SchemaSource::Url(url) => {
+                let response = reqwest::blocking::get(*url)
+                    .map_err(|e| format!("Failed to fetch schema from URL: {}", e))?;
+                let schema_text = response
+                    .text()
+                    .map_err(|e| format!("Failed to read schema text: {}", e))?;
+                let schema: Value = serde_json::from_str(&schema_text)
+                    .map_err(|e| format!("Failed to parse schema JSON: {}", e))?;
+                Ok(Some(schema))
+            }
+        }
+    }
+}
+
+/// Validate a `credentialSubject` against a [SchemaSource].
+fn validate_subject(
+    subject: &Value,
+    schema: &SchemaSource,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(schema) = schema.resolve()? {
+        if !jsonschema::is_valid(&schema, subject) {
+            return Err("Credential subject does not match schema".into());
+        }
+    }
+    Ok(())
+}
+
+/// Parse a 32-byte Ed25519 signing key from arbitrary byte input.
+fn signing_key_from_bytes(
+    private_key: impl AsRef<[u8]>,
+) -> Result<SigningKey, Box<dyn std::error::Error>> {
+    let private_key_array: [u8; 32] = private_key.as_ref().try_into().map_err(|_| {
+        "Invalid private key length: expected 32 bytes, but received a different size."
+    })?;
+    Ok(SigningKey::from_bytes(&private_key_array))
+}
+
 impl UnsignedVerifiableCredential {
-    /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue.
+    /// Validate this credential's `credentialSubject` against a [SchemaSource].
+    ///
+    /// Call this before [sign](UnsignedVerifiableCredential::sign) when you need
+    /// schema validation, e.g. `vc.validate(&schema)?; vc.sign(key)?`.
+    pub fn validate(&self, schema: &SchemaSource) -> Result<(), Box<dyn std::error::Error>> {
+        validate_subject(&self.credential_subject, schema)
+    }
+
+    /// Sign the Verifiable Credential with an Ed25519 private key, producing a
+    /// [VerifiableCredential] with a default proof and a computed `proofValue`.
+    ///
+    /// This performs no schema validation; call
+    /// [validate](UnsignedVerifiableCredential::validate) first if you need it.
     pub fn sign(
         self,
         private_key: impl AsRef<[u8]>,
     ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
-        let private_key_slice = private_key.as_ref();
-        let private_key_array: [u8; 32] = private_key_slice.try_into().map_err(|_| {
-            "Invalid private key length: expected 32 bytes, but received a different size."
-        })?;
-        let signing_key = SigningKey::from_bytes(&private_key_array);
+        let signing_key = signing_key_from_bytes(private_key)?;
         let message = serde_json::to_string(&self)
-            .map_err(|e| format!("Failed to serialize credential during sign: {}", e))?
-            .as_bytes()
-            .to_vec();
-        let signature = signing_key.sign(&message);
-
-        let proof = Proof {
-            id: None,
-            proof_type: "Ed25519Signature2018".to_string(),
-            proof_purpose: "assertionMethod".to_string(),
-            verification_method: None,
-            cryptosuite: None,
-            created: None,
-            expires: None,
-            domain: None,
-            challenge: None,
-            proof_value: BASE64_STANDARD.encode(signature.to_bytes()),
-            previous_proof: None,
-            nonce: None,
-        };
-
-        Ok(VerifiableCredential {
-            unsigned: self,
-            proof,
-        })
-    }
-
-    /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue. Also performs a JSON schema check on the credentialSubject.
-    pub fn sign_with_schema_check(
-        self,
-        private_key: impl AsRef<[u8]>,
-        schema: &Value,
-    ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
-        // Validate the credentialSubject against the provided schema
-        let credential_subject = &self.credential_subject;
-
-        if !jsonschema::is_valid(schema, credential_subject) {
-            return Err("Credential subject does not match schema".into());
-        }
-
-        // Proceed with signing if validation is successful
-        let private_key_slice = private_key.as_ref();
-        let private_key_array: [u8; 32] = private_key_slice.try_into().map_err(|_| {
-            "Invalid private key length: expected 32 bytes, but received a different size."
-        })?;
-        let signing_key = SigningKey::from_bytes(&private_key_array);
-        let message = serde_json::to_string(&self)
-            .map_err(|e| format!("Failed to serialize credential during sign: {}", e))?
-            .as_bytes()
-            .to_vec();
-        let signature = signing_key.sign(&message);
-
-        let proof = Proof {
-            id: None,
-            proof_type: "Ed25519Signature2018".to_string(),
-            proof_purpose: "assertionMethod".to_string(),
-            verification_method: None,
-            cryptosuite: None,
-            created: None,
-            expires: None,
-            domain: None,
-            challenge: None,
-            proof_value: BASE64_STANDARD.encode(signature.to_bytes()),
-            previous_proof: None,
-            nonce: None,
-        };
-
-        Ok(VerifiableCredential {
-            unsigned: self,
-            proof,
-        })
-    }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-impl UnsignedVerifiableCredential {
-    /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue. Also performs a JSON schema check on the credentialSubject. The schema is fetched from a URL.
-    pub fn sign_with_schema_check_from_url(
-        self,
-        private_key: impl AsRef<[u8]>,
-        schema_url: &str,
-    ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
-        // Attempt to get the schema from the URL using reqwest
-
-        let response = reqwest::blocking::get(schema_url)
-            .map_err(|e| format!("Failed to fetch schema from URL: {}", e))?;
-        let schema_text = response
-            .text()
-            .map_err(|e| format!("Failed to read schema text: {}", e))?;
-        let schema: Value = serde_json::from_str(&schema_text)
-            .map_err(|e| format!("Failed to parse schema JSON: {}", e))?;
-
-        // Validate the credentialSubject against the schema
-        let credential_subject = &self.credential_subject;
-        if !jsonschema::is_valid(&schema, credential_subject) {
-            return Err("Credential subject does not match schema".into());
-        }
-
-        // Proceed with signing if validation is successful
-        let private_key_slice = private_key.as_ref();
-        let private_key_array: [u8; 32] = private_key_slice.try_into().map_err(|_| {
-            "Invalid private key length: expected 32 bytes, but received a different size."
-        })?;
-        let signing_key = SigningKey::from_bytes(&private_key_array);
-        let message = serde_json::to_string(&self)
-            .map_err(|e| format!("Failed to serialize credential during sign: {}", e))?
-            .as_bytes()
-            .to_vec();
-        let signature = signing_key.sign(&message);
-
-        let proof = Proof {
-            id: None,
-            proof_type: "Ed25519Signature2018".to_string(),
-            proof_purpose: "assertionMethod".to_string(),
-            verification_method: None,
-            cryptosuite: None,
-            created: None,
-            expires: None,
-            domain: None,
-            challenge: None,
-            proof_value: BASE64_STANDARD.encode(signature.to_bytes()),
-            previous_proof: None,
-            nonce: None,
-        };
+            .map_err(|e| format!("Failed to serialize credential during sign: {}", e))?;
+        let signature = signing_key.sign(message.as_bytes());
+        let proof = Proof::new_ed25519(BASE64_STANDARD.encode(signature.to_bytes()));
 
         Ok(VerifiableCredential {
             unsigned: self,
@@ -401,6 +368,14 @@ impl VerifiableCredential {
     /// Removes the proof and returns the [UnsignedVerifiableCredential]
     pub fn to_unsigned(self) -> UnsignedVerifiableCredential {
         self.unsigned
+    }
+
+    /// Validate the embedded `credentialSubject` against a [SchemaSource].
+    ///
+    /// Call this alongside [verify](VerifiableCredential::verify) when you need
+    /// schema validation, e.g. `vc.validate(&schema)?; vc.verify(key)?`.
+    pub fn validate(&self, schema: &SchemaSource) -> Result<(), Box<dyn std::error::Error>> {
+        self.unsigned.validate(schema)
     }
 
     /// Verifies the contents of a Verifiable Credential against a public key
@@ -444,23 +419,6 @@ impl VerifiableCredential {
             .verify(message.as_bytes(), &signature)
             .map_err(|e| format!("Failed to verify the credential signature: {}", e))?;
         Ok(())
-    }
-
-    /// Verifies the contents of a Verifiable Credential against a public key and schema
-    pub fn verify_with_schema_check(
-        &self,
-        public_key: &[u8],
-        schema: &Value,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Validate the credentialSubject against the provided schema
-        let credential_subject = &self.unsigned.credential_subject;
-
-        if !jsonschema::is_valid(schema, credential_subject) {
-            return Err("Credential subject does not match schema".into());
-        }
-
-        // Proceed with signature verification if validation is successful
-        self.verify(public_key)
     }
 }
 

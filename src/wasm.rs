@@ -146,7 +146,13 @@ pub fn verify_with_schema_check(
 
     let schema_value = serde_wasm_bindgen::from_value::<serde_json::Value>(schema)
         .map_err(|_| JsError::new("Failed to deserialize schema"))?;
-    match vc.verify_with_schema_check(public_key, &schema_value) {
+    if vc
+        .validate(&crate::SchemaSource::Inline(&schema_value))
+        .is_err()
+    {
+        return Ok(false);
+    }
+    match vc.verify(public_key) {
         Ok(_) => Ok(true),
         Err(_e) => Ok(false),
     }

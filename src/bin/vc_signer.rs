@@ -1,7 +1,9 @@
 use clap::{Parser, Subcommand};
 use std::fs;
 use std::path::PathBuf;
-use verifiable_credential_toolkit::{UnsignedVerifiableCredential, VerifiableCredential};
+use verifiable_credential_toolkit::{
+    SchemaSource, UnsignedVerifiableCredential, VerifiableCredential,
+};
 
 #[derive(Parser)]
 #[command(name = "vc-signer")]
@@ -79,25 +81,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Read the private key
             let private_key = fs::read(key)?;
-            // Sign the VC based on schema validation options
-            let signed_vc = if let Some(schema_path) = schema {
-                let schema_str = fs::read_to_string(schema_path)?;
-                let schema_json: serde_json::Value = serde_json::from_str(&schema_str)?;
-                unsigned_vc.sign_with_schema_check(&private_key, &schema_json)?
+
+            // Resolve the schema source from the CLI options. An inline schema
+            // file is loaded here so it outlives the borrow held by SchemaSource.
+            let inline_schema = match &schema {
+                Some(schema_path) => {
+                    let schema_str = fs::read_to_string(schema_path)?;
+                    Some(serde_json::from_str::<serde_json::Value>(&schema_str)?)
+                }
+                None => None,
+            };
+
+            let schema_source = if let Some(ref schema_json) = inline_schema {
+                SchemaSource::Inline(schema_json)
             } else {
                 #[cfg(not(target_arch = "wasm32"))]
-                if let Some(url) = schema_url {
-                    unsigned_vc.sign_with_schema_check_from_url(&private_key, &url)?
-                } else {
-                    unsigned_vc.sign(&private_key)?
+                {
+                    match &schema_url {
+                        Some(url) => SchemaSource::Url(url.as_str()),
+                        None => SchemaSource::None,
+                    }
                 }
-
                 #[cfg(target_arch = "wasm32")]
                 {
-                    println!("URL schema validation is not supported in the WASM build, skipping schema validation.");
-                    unsigned_vc.sign(&private_key)?
+                    SchemaSource::None
                 }
             };
+
+            // Validate against the schema (if any) before signing.
+            unsigned_vc.validate(&schema_source)?;
+            let signed_vc = unsigned_vc.sign(&private_key)?;
 
             // Save the signed VC
             let signed_vc_str = serde_json::to_string_pretty(&signed_vc)?;
