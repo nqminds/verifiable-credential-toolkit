@@ -1,9 +1,12 @@
 // Node.js example: Sign and verify a Verifiable Credential with schema validation
 //
-// Prerequisites:
-//   1. cargo build --target wasm32-unknown-unknown --release
-//   2. wasm-bindgen --target nodejs --out-dir wasm_nodejs_example_usage/pkg target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm
-//   3. Run: node index.js
+// Prerequisites (from this directory):
+//   1. npm run build   # builds WASM, generates pkg/, marks it as CommonJS
+//   2. npm start        # or: node index.js
+//
+// `npm run build` is needed because wasm-bindgen's `nodejs` target emits
+// CommonJS, while this directory is an ES module ("type": "module"); the build
+// script writes pkg/package.json with "type": "commonjs" so the import works.
 
 import {
   sign,

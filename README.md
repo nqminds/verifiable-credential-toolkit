@@ -749,14 +749,22 @@ python3 -m http.server 8080
 ### Running the Node.js Example
 
 ```bash
-# Build WASM and generate Node.js bindings
-cargo build --target wasm32-unknown-unknown --release
-wasm-bindgen --target nodejs --out-dir wasm_nodejs_example_usage/pkg \
-  target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm
+cd wasm_nodejs_example_usage
+
+# Build the WASM, generate Node.js bindings, and write pkg/package.json.
+# wasm-bindgen's `nodejs` target emits CommonJS, but this example dir is an
+# ES module ("type": "module"), so the generated pkg/ needs its own
+# package.json declaring "type": "commonjs". `npm run build` does all of this.
+npm run build
 
 # Run the example
-cd wasm_nodejs_example_usage
-node index.js
+npm start          # or: node index.js
+```
+
+If you build by hand instead of `npm run build`, remember the final step:
+
+```bash
+echo '{"type":"commonjs"}' > wasm_nodejs_example_usage/pkg/package.json
 ```
 
 ### Running the Rust Examples

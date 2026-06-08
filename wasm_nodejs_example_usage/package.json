@@ -5,7 +5,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "cargo build --target wasm32-unknown-unknown --release --manifest-path ../Cargo.toml && wasm-bindgen --target nodejs --out-dir pkg ../target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm && echo '{\"type\":\"commonjs\"}' > pkg/package.json",
+    "start": "node index.js"
   },
   "author": "",
   "license": "ISC"
