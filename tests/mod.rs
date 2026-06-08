@@ -63,6 +63,38 @@ mod tests {
         assert!(serde_json::to_string(&signed_vc).is_ok());
     }
 
+    /// Build a credential via the builder, then sign and verify it round-trip.
+    #[test]
+    fn build_sign_verify_with_builder() {
+        use verifiable_credential_toolkit::Issuer;
+
+        let private_key = SigningKey::from_bytes(
+            &std::fs::read("tests/test_data/keys/key.priv")
+                .expect("Error reading private key from file"),
+        )
+        .expect("Invalid private key");
+        let public_key = VerifyingKey::from_bytes(
+            &std::fs::read("tests/test_data/keys/key.pub")
+                .expect("Error reading public key from file"),
+        )
+        .expect("Invalid public key");
+
+        let vc = UnsignedVerifiableCredential::builder(
+            vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
+            vec!["VerifiableCredential".to_string()],
+            Issuer::Url(Url::parse("https://example.com/issuer").unwrap()),
+            serde_json::json!({ "id": "urn:uuid:device-1", "name": "Sensor A" }),
+        )
+        .id(Url::parse("urn:uuid:9a3e3c0e-2db0-412a-95c7-cf5520ba78df").unwrap())
+        .valid_from(Utc::now() - Duration::days(1))
+        .build();
+
+        let signed_vc = vc.sign(&private_key).expect("Failed to sign builder VC");
+        signed_vc
+            .verify(&public_key)
+            .expect("Failed to verify builder VC");
+    }
+
     /// Test that two UnsignedVerifiableCredential of equal values but different ordering produce the same signed VerifiableCredential
     #[test]
     fn canonicalisation_sign() {

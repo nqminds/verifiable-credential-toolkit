@@ -262,6 +262,27 @@ std::fs::write("issuer.priv", keypair.signing_key.to_bytes()).unwrap();
 std::fs::write("issuer.pub", keypair.verifying_key.to_bytes()).unwrap();
 ```
 
+#### Construct a Credential
+
+You can deserialize one from JSON, or build it programmatically with the fluent
+builder (which mirrors the `Proof` builder — required fields up front, optional
+setters chained, then `.build()`):
+
+```rust
+use verifiable_credential_toolkit::{Issuer, UnsignedVerifiableCredential};
+use url::Url;
+use serde_json::json;
+
+let unsigned_vc = UnsignedVerifiableCredential::builder(
+    vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
+    vec!["VerifiableCredential".to_string()],
+    Issuer::Url(Url::parse("https://example.com/issuer").unwrap()),
+    json!({ "id": "urn:uuid:device-1", "name": "Sensor A" }),
+)
+.id(Url::parse("urn:uuid:9a3e3c0e-2db0-412a-95c7-cf5520ba78df").unwrap())
+.build();
+```
+
 #### Sign a Credential
 
 ```rust
@@ -654,6 +675,7 @@ class KeyPair {
 | `generate_keypair() → KeyPair`                                                                                   | Generate a new Ed25519 `KeyPair { signing_key, verifying_key }`             |
 | `SigningKey::from_bytes(&[u8]) → Result<SigningKey>`                                                             | Parse a 32-byte private key (errors otherwise)                              |
 | `VerifyingKey::from_bytes(&[u8]) → Result<VerifyingKey>`                                                         | Parse a 32-byte public key (errors otherwise)                              |
+| `UnsignedVerifiableCredential::builder(context, type, issuer, subject) → …Builder`                              | Fluent builder; chain optional setters then `.build()`                      |
 | `UnsignedVerifiableCredential::validate(&SchemaSource) → Result<()>`                                             | Validate `credentialSubject` against a `SchemaSource` (`None` / `Inline` / `Url`) |
 | `UnsignedVerifiableCredential::sign(&SigningKey) → Result<VerifiableCredential>`                                 | Sign a credential (call `validate` first for schema checks)                 |
 | `VerifiableCredential::validate(&SchemaSource) → Result<()>`                                                     | Validate the embedded `credentialSubject` against a `SchemaSource`          |
@@ -685,7 +707,13 @@ The per-format convenience wrappers (`sign_cbor_vc`, `verify_cbor_vc`, `sign_pro
 | `sign(unsignedVC, privateKey) → VerifiableCredential`             | Sign a credential (throws on error)                                      |
 | `verify(signedVC, publicKey) → boolean`                           | Verify a signed credential                                               |
 | `verify_with_schema_check(signedVC, publicKey, schema) → boolean` | Verify with JSON Schema validation                                       |
+| `sign_cbor_vc(unsignedBytes, privateKey) → Uint8Array`            | Sign a CBOR-encoded credential                                           |
+| `verify_cbor_vc(signedBytes, publicKey) → boolean`                | Verify a CBOR-encoded credential                                         |
+| `sign_protobuf_vc(unsignedBytes, privateKey) → Uint8Array`        | Sign a Protobuf-encoded credential                                       |
+| `verify_protobuf_vc(signedBytes, publicKey) → boolean`            | Verify a Protobuf-encoded credential                                     |
 | `normalize_object(input) → any`                                   | Remove `undefined`/`null` values from JS objects (useful before signing) |
+
+TypeScript types live in [`verifiable_credential_toolkit.d.ts`](./verifiable_credential_toolkit.d.ts). Keys use branded types (`SigningKey` / `VerifyingKey`) so a public and private key can't be swapped at a call site — `KeyPair.signing_key()` / `.verifying_key()` return the right brand, and raw bytes are branded with an assertion (`bytes as SigningKey`).
 
 ---
 

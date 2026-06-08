@@ -60,6 +60,79 @@ pub struct UnsignedVerifiableCredential {
     pub credential_schema: Option<Vec<CredentialSchema>>,
 }
 
+/// A fluent builder for [UnsignedVerifiableCredential].
+///
+/// Mirrors the consuming-`self` builder on [Proof]: start from
+/// [UnsignedVerifiableCredential::builder] with the required fields, chain the
+/// optional setters, then call [build](UnsignedVerifiableCredentialBuilder::build).
+///
+/// ```
+/// # use verifiable_credential_toolkit::{UnsignedVerifiableCredential, Issuer};
+/// # use url::Url;
+/// # use serde_json::json;
+/// let vc = UnsignedVerifiableCredential::builder(
+///     vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
+///     vec!["VerifiableCredential".to_string()],
+///     Issuer::Url(Url::parse("https://example.com/issuer").unwrap()),
+///     json!({ "id": "urn:uuid:device-1", "name": "Sensor A" }),
+/// )
+/// .id(Url::parse("urn:uuid:9a3e3c0e-2db0-412a-95c7-cf5520ba78df").unwrap())
+/// .build();
+/// ```
+#[derive(Debug, Clone)]
+pub struct UnsignedVerifiableCredentialBuilder {
+    inner: UnsignedVerifiableCredential,
+}
+
+impl UnsignedVerifiableCredentialBuilder {
+    /// Set the credential `id`.
+    pub fn id(mut self, id: Url) -> Self {
+        self.inner.id = Some(id);
+        self
+    }
+
+    /// Set the credential `name`.
+    pub fn name(mut self, name: LanguageValue) -> Self {
+        self.inner.name = Some(name);
+        self
+    }
+
+    /// Set the credential `description`.
+    pub fn description(mut self, description: LanguageValue) -> Self {
+        self.inner.description = Some(description);
+        self
+    }
+
+    /// Set the `validFrom` timestamp.
+    pub fn valid_from(mut self, valid_from: DateTime<Utc>) -> Self {
+        self.inner.valid_from = Some(valid_from);
+        self
+    }
+
+    /// Set the `validUntil` timestamp.
+    pub fn valid_until(mut self, valid_until: DateTime<Utc>) -> Self {
+        self.inner.valid_until = Some(valid_until);
+        self
+    }
+
+    /// Set the `credentialStatus`.
+    pub fn credential_status(mut self, credential_status: Status) -> Self {
+        self.inner.credential_status = Some(credential_status);
+        self
+    }
+
+    /// Set the `credentialSchema` list.
+    pub fn credential_schema(mut self, credential_schema: Vec<CredentialSchema>) -> Self {
+        self.inner.credential_schema = Some(credential_schema);
+        self
+    }
+
+    /// Finish building and return the [UnsignedVerifiableCredential].
+    pub fn build(self) -> UnsignedVerifiableCredential {
+        self.inner
+    }
+}
+
 /// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - <https://www.w3.org/TR/vc-data-model-2.0>, this adds the proof to the UnsignedVerifiableCredential struct
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -104,9 +177,9 @@ pub enum Holder {
 /// <https://www.w3.org/TR/vc-data-model-2.0/#holder>
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct HolderObject {
-    id: Url,
+    pub id: Url,
     #[serde(flatten)]
-    additional_properties: Option<HashMap<String, Value>>,
+    pub additional_properties: Option<HashMap<String, Value>>,
 }
 
 /// <https://www.w3.org/TR/vc-data-model-2.0/#issuer>
@@ -120,9 +193,9 @@ pub enum Issuer {
 /// <https://www.w3.org/TR/vc-data-model-2.0/#issuer>
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct IssuerObject {
-    id: Url,
+    pub id: Url,
     #[serde(flatten)]
-    additional_properties: Option<HashMap<String, Value>>,
+    pub additional_properties: Option<HashMap<String, Value>>,
 }
 
 /// <https://www.w3.org/TR/vc-data-model-2.0/#names-and-descriptions>
@@ -137,21 +210,21 @@ pub enum LanguageValue {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct LanguageObject {
     #[serde(rename = "@value")]
-    value: String,
+    pub value: String,
     #[serde(rename = "@language", skip_serializing_if = "Option::is_none")]
-    language: Option<String>,
+    pub language: Option<String>,
     #[serde(rename = "@direction", skip_serializing_if = "Option::is_none")]
-    direction: Option<String>,
+    pub direction: Option<String>,
 }
 /// <https://www.w3.org/TR/vc-data-model-2.0/#status>
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Status {
     #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
-    id: Option<Url>,
+    pub id: Option<Url>,
     #[serde(rename = "type")]
     #[serde_as(as = "OneOrMany<_, PreferOne>")]
-    status_type: Vec<String>,
+    pub status_type: Vec<String>,
 }
 /// <https://www.w3.org/TR/vc-data-model-2.0/#data-schemas>
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -323,6 +396,32 @@ fn validate_subject(subject: &Value, schema: &SchemaSource) -> Result<(), VcErro
 }
 
 impl UnsignedVerifiableCredential {
+    /// Start building a credential from its required fields (`@context`, `type`,
+    /// `issuer`, `credentialSubject`). Chain optional setters on the returned
+    /// [UnsignedVerifiableCredentialBuilder], then call `.build()`.
+    pub fn builder(
+        context: Vec<Url>,
+        credential_type: Vec<String>,
+        issuer: Issuer,
+        credential_subject: Value,
+    ) -> UnsignedVerifiableCredentialBuilder {
+        UnsignedVerifiableCredentialBuilder {
+            inner: UnsignedVerifiableCredential {
+                context,
+                id: None,
+                credential_type,
+                name: None,
+                description: None,
+                issuer,
+                credential_subject,
+                valid_from: None,
+                valid_until: None,
+                credential_status: None,
+                credential_schema: None,
+            },
+        }
+    }
+
     /// Validate this credential's `credentialSubject` against a [SchemaSource].
     ///
     /// Call this before [sign](UnsignedVerifiableCredential::sign) when you need

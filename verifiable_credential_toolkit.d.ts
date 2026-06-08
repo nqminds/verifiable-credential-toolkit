@@ -52,45 +52,61 @@ export interface Proof {
   nonce?: string | string[];
 }
 
+/**
+ * A 32-byte Ed25519 private (signing) key.
+ *
+ * Branded so it cannot be mixed up with a `VerifyingKey` at compile time —
+ * mirroring the Rust `SigningKey` / `VerifyingKey` newtypes. `KeyPair.signing_key()`
+ * returns one; to brand raw bytes loaded from elsewhere, assert the type:
+ * `const sk = rawBytes as SigningKey;`
+ */
+export type SigningKey = Uint8Array & { readonly __brand: "SigningKey" };
+
+/**
+ * A 32-byte Ed25519 public (verifying) key. See {@link SigningKey} for the
+ * branding rationale; brand raw bytes with `rawBytes as VerifyingKey`.
+ */
+export type VerifyingKey = Uint8Array & { readonly __brand: "VerifyingKey" };
+
 export class KeyPair {
   constructor(signing_key: Uint8Array, verifying_key: Uint8Array);
-  signing_key(): Uint8Array;
-  verifying_key(): Uint8Array;
+  signing_key(): SigningKey;
+  verifying_key(): VerifyingKey;
 }
 
 export function generate_keypair(): KeyPair;
 export function sign(
   unsigned_vc: UnsignedVerifiableCredential,
-  private_key: Uint8Array
+  private_key: SigningKey
 ): VerifiableCredential;
 export function verify(
   signed_vc: VerifiableCredential,
-  public_key: Uint8Array
+  public_key: VerifyingKey
 ): boolean;
 export function verify_with_schema_check(
   signed_vc: VerifiableCredential,
-  public_key: Uint8Array,
+  public_key: VerifyingKey,
   schema: any
 ): boolean;
 
 // CBOR bindings: operate on CBOR-encoded credential bytes.
 export function sign_cbor_vc(
   unsigned_vc_cbor: Uint8Array,
-  private_key: Uint8Array
+  private_key: SigningKey
 ): Uint8Array;
 export function verify_cbor_vc(
   signed_vc_cbor: Uint8Array,
-  public_key: Uint8Array
+  public_key: VerifyingKey
 ): boolean;
 
 // Protobuf bindings: operate on Protobuf-encoded credential bytes.
 export function sign_protobuf_vc(
   unsigned_vc_protobuf: Uint8Array,
-  private_key: Uint8Array
+  private_key: SigningKey
 ): Uint8Array;
 export function verify_protobuf_vc(
   signed_vc_protobuf: Uint8Array,
-  public_key: Uint8Array
+  public_key: VerifyingKey
 ): boolean;
 
 export function normalize_object(input: any): any;
