@@ -1,44 +1,51 @@
+use crate::bindings::{sign_via, verify_via, CredentialCodec};
 use crate::UnsignedVerifiableCredential;
 use crate::VerifiableCredential;
+use crate::{SigningKey, VcError, VerifyingKey};
 use c2pa_cbor::{from_slice, to_vec};
+
+/// The CBOR serialization format.
+pub struct Cbor;
+
+impl CredentialCodec for Cbor {
+    fn decode_unsigned(bytes: &[u8]) -> Result<UnsignedVerifiableCredential, VcError> {
+        decode_unsigned_vc_from_cbor(bytes).map_err(|e| VcError::Codec(Box::new(e)))
+    }
+
+    fn decode_signed(bytes: &[u8]) -> Result<VerifiableCredential, VcError> {
+        decode_signed_vc_from_cbor(bytes).map_err(|e| VcError::Codec(Box::new(e)))
+    }
+
+    fn encode_signed(vc: &VerifiableCredential) -> Result<Vec<u8>, VcError> {
+        encode_signed_vc_to_cbor(vc).map_err(|e| VcError::Codec(Box::new(e)))
+    }
+}
 
 /// Decode cbor bytes into the existing unsigned VC Rust struct.
 pub fn decode_unsigned_vc_from_cbor(
     bytes: &[u8],
 ) -> Result<UnsignedVerifiableCredential, c2pa_cbor::Error> {
-    let decoded: Result<UnsignedVerifiableCredential, c2pa_cbor::Error> = from_slice(bytes);
-    decoded
+    from_slice(bytes)
 }
 
 /// Decode cbor bytes into the existing signed VC Rust struct.
 pub fn decode_signed_vc_from_cbor(bytes: &[u8]) -> Result<VerifiableCredential, c2pa_cbor::Error> {
-    let decoded: Result<VerifiableCredential, c2pa_cbor::Error> = from_slice(bytes);
-    decoded
+    from_slice(bytes)
 }
 
 /// Encode the existing signed VC Rust struct into cbor bytes.
 pub fn encode_signed_vc_to_cbor(vc: &VerifiableCredential) -> Result<Vec<u8>, c2pa_cbor::Error> {
-    let encoded: Result<Vec<u8>, c2pa_cbor::Error> = to_vec(&vc);
-    encoded
+    to_vec(&vc)
 }
 
-pub fn sign_cbor_vc(
-    unsigned_vc_cbor: &[u8],
-    private_key: &[u8],
-) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
-    let decoded = decode_unsigned_vc_from_cbor(unsigned_vc_cbor)?;
-    let signed = decoded.sign(private_key)?;
-
-    Ok(encode_signed_vc_to_cbor(&signed)?)
+/// Convenience wrapper: decode unsigned VC cbor, sign it, and re-encode as cbor.
+pub fn sign_cbor_vc(unsigned_vc_cbor: &[u8], signing_key: &SigningKey) -> Result<Vec<u8>, VcError> {
+    sign_via::<Cbor>(unsigned_vc_cbor, signing_key)
 }
 
-/// Convenience wrapper: decode signed VC cbor and verify with existing JSON-path logic.
-pub fn verify_cbor_vc(
-    signed_vc_cbor: &[u8],
-    public_key: &[u8],
-) -> Result<(), Box<dyn std::error::Error + 'static>> {
-    let decoded = decode_signed_vc_from_cbor(signed_vc_cbor)?;
-    Ok(decoded.verify(public_key)?)
+/// Convenience wrapper: decode signed VC cbor and verify its signature.
+pub fn verify_cbor_vc(signed_vc_cbor: &[u8], verifying_key: &VerifyingKey) -> Result<(), VcError> {
+    verify_via::<Cbor>(signed_vc_cbor, verifying_key)
 }
 
 #[cfg(test)]
@@ -69,13 +76,13 @@ mod tests {
 
     #[test]
     fn test_sign_and_verify_roundtrip() {
-        let (private_key, public_key) = generate_keypair();
+        let keypair = generate_keypair();
 
         let unsigned_vc = sample_unsigned_vc();
 
         let cbor: Vec<u8> = to_vec(&unsigned_vc).expect("failed to serialize unsigned VC to CBOR");
-        let signed_bytes = sign_cbor_vc(&cbor, &private_key).expect("CBOR signing failed");
+        let signed_bytes = sign_cbor_vc(&cbor, &keypair.signing_key).expect("CBOR signing failed");
 
-        verify_cbor_vc(&signed_bytes, &public_key).expect("cbor verification failed");
+        verify_cbor_vc(&signed_bytes, &keypair.verifying_key).expect("cbor verification failed");
     }
 }

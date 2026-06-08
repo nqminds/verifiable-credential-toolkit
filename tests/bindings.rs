@@ -14,15 +14,22 @@ use verifiable_credential_toolkit::{
         },
     },
     proto_schemas::vc::UnsignedVerifiableCredential as ProtobufUnsignedVerifiableCredential,
-    UnsignedVerifiableCredential, VerifiableCredential,
+    SigningKey, UnsignedVerifiableCredential, VerifiableCredential, VerifyingKey,
 };
 
-fn load_private_key() -> Vec<u8> {
-    std::fs::read("tests/test_data/keys/key.priv").expect("Error reading private key from file")
+fn load_private_key() -> SigningKey {
+    SigningKey::from_bytes(
+        &std::fs::read("tests/test_data/keys/key.priv")
+            .expect("Error reading private key from file"),
+    )
+    .expect("Invalid private key")
 }
 
-fn load_public_key() -> Vec<u8> {
-    std::fs::read("tests/test_data/keys/key.pub").expect("Error reading public key from file")
+fn load_public_key() -> VerifyingKey {
+    VerifyingKey::from_bytes(
+        &std::fs::read("tests/test_data/keys/key.pub").expect("Error reading public key from file"),
+    )
+    .expect("Invalid public key")
 }
 
 fn sample_unsigned_vc() -> UnsignedVerifiableCredential {
@@ -32,7 +39,7 @@ fn sample_unsigned_vc() -> UnsignedVerifiableCredential {
     .expect("Failed to deserialize JSON")
 }
 
-fn sample_signed_vc(private_key: &[u8]) -> VerifiableCredential {
+fn sample_signed_vc(private_key: &SigningKey) -> VerifiableCredential {
     sample_unsigned_vc()
         .sign(private_key)
         .expect("Failed to sign VC")

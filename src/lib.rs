@@ -1,12 +1,15 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
 use chrono::{DateTime, Utc};
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{
+    Signature, Signer, SigningKey as DalekSigningKey, Verifier, VerifyingKey as DalekVerifyingKey,
+};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::formats::PreferOne;
 use serde_with::{serde_as, OneOrMany};
 use std::collections::HashMap;
+use std::fmt;
 use url::Url;
 
 pub mod bindings;
@@ -92,6 +95,7 @@ pub struct VerifiablePresentation {
 
 /// <https://www.w3.org/TR/vc-data-model-2.0/#holder>
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(untagged)]
 pub enum Holder {
     Url(Url),
     Object(HolderObject),
@@ -318,15 +322,6 @@ fn validate_subject(subject: &Value, schema: &SchemaSource) -> Result<(), VcErro
     Ok(())
 }
 
-/// Parse a 32-byte Ed25519 signing key from arbitrary byte input.
-fn signing_key_from_bytes(private_key: impl AsRef<[u8]>) -> Result<SigningKey, VcError> {
-    let private_key_array: [u8; 32] = private_key
-        .as_ref()
-        .try_into()
-        .map_err(|_| VcError::InvalidPrivateKeyLength)?;
-    Ok(SigningKey::from_bytes(&private_key_array))
-}
-
 impl UnsignedVerifiableCredential {
     /// Validate this credential's `credentialSubject` against a [SchemaSource].
     ///
@@ -336,15 +331,15 @@ impl UnsignedVerifiableCredential {
         validate_subject(&self.credential_subject, schema)
     }
 
-    /// Sign the Verifiable Credential with an Ed25519 private key, producing a
+    /// Sign the Verifiable Credential with an Ed25519 [SigningKey], producing a
     /// [VerifiableCredential] with a default proof and a computed `proofValue`.
     ///
     /// This performs no schema validation; call
     /// [validate](UnsignedVerifiableCredential::validate) first if you need it.
-    pub fn sign(self, private_key: impl AsRef<[u8]>) -> Result<VerifiableCredential, VcError> {
-        let signing_key = signing_key_from_bytes(private_key)?;
+    pub fn sign(self, signing_key: &SigningKey) -> Result<VerifiableCredential, VcError> {
+        let dalek_key = DalekSigningKey::from_bytes(&signing_key.0);
         let message = serde_json::to_string(&self)?;
-        let signature = signing_key.sign(message.as_bytes());
+        let signature = dalek_key.sign(message.as_bytes());
         let proof = Proof::new_ed25519(BASE64_STANDARD.encode(signature.to_bytes()));
 
         Ok(VerifiableCredential {
@@ -368,8 +363,8 @@ impl VerifiableCredential {
         self.unsigned.validate(schema)
     }
 
-    /// Verifies the contents of a Verifiable Credential against a public key
-    pub fn verify(&self, public_key: &[u8]) -> Result<(), VcError> {
+    /// Verifies the contents of a Verifiable Credential against a [VerifyingKey]
+    pub fn verify(&self, verifying_key: &VerifyingKey) -> Result<(), VcError> {
         let now = Utc::now();
 
         // Check if the current timestamp is within the validity period
@@ -387,28 +382,110 @@ impl VerifiableCredential {
         let message = serde_json::to_string(&self.unsigned)?;
         let proof_bytes = BASE64_STANDARD.decode(&self.proof.proof_value)?;
         let signature = Signature::from_slice(&proof_bytes).map_err(VcError::MalformedSignature)?;
-        let public_key_array: [u8; 32] = public_key
-            .try_into()
-            .map_err(|_| VcError::InvalidPublicKeyLength)?;
-        let public_key =
-            VerifyingKey::from_bytes(&public_key_array).map_err(VcError::InvalidPublicKey)?;
+        let dalek_key =
+            DalekVerifyingKey::from_bytes(&verifying_key.0).map_err(VcError::InvalidPublicKey)?;
 
-        public_key
+        dalek_key
             .verify(message.as_bytes(), &signature)
             .map_err(VcError::SignatureVerificationFailed)?;
         Ok(())
     }
 }
 
-/// Generate a new Ed25519 keypair tuple. First is the signing key, second is the verifying key.
-pub fn generate_keypair() -> ([u8; 32], [u8; 32]) {
+/// A 32-byte Ed25519 private key, used to [sign](UnsignedVerifiableCredential::sign)
+/// credentials.
+///
+/// A distinct type from [VerifyingKey] so the two cannot be swapped by accident —
+/// passing a public key where a private key is expected (or vice versa) is a compile
+/// error rather than a silent runtime failure.
+#[derive(Clone)]
+pub struct SigningKey([u8; 32]);
+
+/// A 32-byte Ed25519 public key, used to [verify](VerifiableCredential::verify)
+/// credentials. See [SigningKey] for why this is a distinct type.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct VerifyingKey([u8; 32]);
+
+impl SigningKey {
+    /// Construct a signing key from exactly 32 bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, VcError> {
+        let array: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| VcError::InvalidPrivateKeyLength)?;
+        Ok(Self(array))
+    }
+
+    /// The raw 32-byte representation of the key.
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl VerifyingKey {
+    /// Construct a verifying key from exactly 32 bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, VcError> {
+        let array: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| VcError::InvalidPublicKeyLength)?;
+        Ok(Self(array))
+    }
+
+    /// The raw 32-byte representation of the key.
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl From<[u8; 32]> for SigningKey {
+    fn from(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+}
+
+impl From<[u8; 32]> for VerifyingKey {
+    fn from(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+}
+
+impl TryFrom<&[u8]> for SigningKey {
+    type Error = VcError;
+    fn try_from(bytes: &[u8]) -> Result<Self, VcError> {
+        Self::from_bytes(bytes)
+    }
+}
+
+impl TryFrom<&[u8]> for VerifyingKey {
+    type Error = VcError;
+    fn try_from(bytes: &[u8]) -> Result<Self, VcError> {
+        Self::from_bytes(bytes)
+    }
+}
+
+// Redact the secret in Debug output so it can't leak into logs.
+impl fmt::Debug for SigningKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SigningKey([REDACTED])")
+    }
+}
+
+/// An Ed25519 key pair produced by [generate_keypair].
+#[derive(Clone)]
+pub struct KeyPair {
+    /// The private key used to sign credentials.
+    pub signing_key: SigningKey,
+    /// The public key used to verify credentials.
+    pub verifying_key: VerifyingKey,
+}
+
+/// Generate a new Ed25519 [KeyPair].
+pub fn generate_keypair() -> KeyPair {
     let mut csprng = OsRng;
-    let signing_key = SigningKey::generate(&mut csprng);
-    let verifying_key: VerifyingKey = signing_key.verifying_key();
+    let signing_key = DalekSigningKey::generate(&mut csprng);
+    let verifying_key = signing_key.verifying_key();
 
-    let signing_key_bytes = signing_key.to_bytes();
-
-    let verifying_key_bytes = verifying_key.to_bytes();
-
-    (signing_key_bytes, verifying_key_bytes)
+    KeyPair {
+        signing_key: SigningKey(signing_key.to_bytes()),
+        verifying_key: VerifyingKey(verifying_key.to_bytes()),
+    }
 }

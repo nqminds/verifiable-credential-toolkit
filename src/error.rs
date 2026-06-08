@@ -55,4 +55,9 @@ pub enum VcError {
     /// The signature did not verify against the credential and public key.
     #[error("signature verification failed")]
     SignatureVerificationFailed(#[source] ed25519_dalek::SignatureError),
+
+    /// A serialization-format codec (e.g. CBOR or Protobuf) failed to decode or
+    /// encode a credential. Carries the underlying format-specific error.
+    #[error("codec error: {0}")]
+    Codec(#[source] Box<dyn std::error::Error + Send + Sync>),
 }

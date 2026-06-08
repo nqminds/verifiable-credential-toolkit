@@ -2,7 +2,7 @@ use clap::{Parser, Subcommand};
 use std::fs;
 use std::path::PathBuf;
 use verifiable_credential_toolkit::{
-    SchemaSource, UnsignedVerifiableCredential, VerifiableCredential,
+    SchemaSource, SigningKey, UnsignedVerifiableCredential, VerifiableCredential, VerifyingKey,
 };
 
 #[derive(Parser)]
@@ -45,7 +45,7 @@ enum Commands {
         #[arg(short, long)]
         input_vc: PathBuf,
 
-        /// Path to the private key file
+        /// Path to the public key file
         #[arg(short, long)]
         key: PathBuf,
     },
@@ -80,7 +80,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             // Read the private key
-            let private_key = fs::read(key)?;
+            let signing_key = SigningKey::from_bytes(&fs::read(key)?)?;
 
             // Resolve the schema source from the CLI options. An inline schema
             // file is loaded here so it outlives the borrow held by SchemaSource.
@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             // Validate against the schema (if any) before signing.
             unsigned_vc.validate(&schema_source)?;
-            let signed_vc = unsigned_vc.sign(&private_key)?;
+            let signed_vc = unsigned_vc.sign(&signing_key)?;
 
             // Save the signed VC
             let signed_vc_str = serde_json::to_string_pretty(&signed_vc)?;
@@ -136,10 +136,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             };
 
             // Read the public key
-            let public_key = fs::read(key)?;
+            let verifying_key = VerifyingKey::from_bytes(&fs::read(key)?)?;
 
             // Verify the VC
-            let result = signed_vc.verify(&public_key);
+            let result = signed_vc.verify(&verifying_key);
 
             match result {
                 Ok(_) => {

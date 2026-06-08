@@ -10,7 +10,9 @@
 use verifiable_credential_toolkit::{generate_keypair, SchemaSource, UnsignedVerifiableCredential};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (private_key, public_key) = generate_keypair();
+    let keypair = generate_keypair();
+    let signing_key = keypair.signing_key;
+    let verifying_key = keypair.verifying_key;
 
     // ── Define a JSON Schema for device credentials ─────────────────────
     // This schema requires "id" and "name" fields, and optionally accepts "model".
@@ -54,7 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match valid_vc
         .validate(&SchemaSource::Inline(&schema))
-        .and_then(|()| valid_vc.sign(private_key))
+        .and_then(|()| valid_vc.sign(&signing_key))
     {
         Ok(signed) => {
             println!("✓ Signing succeeded (credential subject matches schema)");
@@ -62,7 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Verify with schema check too
             match signed
                 .validate(&SchemaSource::Inline(&schema))
-                .and_then(|()| signed.verify(&public_key))
+                .and_then(|()| signed.verify(&verifying_key))
             {
                 Ok(()) => println!("✓ Verification with schema check passed\n"),
                 Err(e) => println!("✗ Verification failed: {}\n", e),
@@ -86,7 +88,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match invalid_vc
         .validate(&SchemaSource::Inline(&schema))
-        .and_then(|()| invalid_vc.sign(private_key))
+        .and_then(|()| invalid_vc.sign(&signing_key))
     {
         Ok(_) => println!("✗ Signing succeeded unexpectedly"),
         Err(e) => println!("✓ Signing correctly rejected: {}\n", e),
@@ -108,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match wrong_type_vc
         .validate(&SchemaSource::Inline(&schema))
-        .and_then(|()| wrong_type_vc.sign(private_key))
+        .and_then(|()| wrong_type_vc.sign(&signing_key))
     {
         Ok(_) => println!("✗ Signing succeeded unexpectedly"),
         Err(e) => println!("✓ Signing correctly rejected: {}\n", e),

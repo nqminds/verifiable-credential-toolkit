@@ -1,8 +1,7 @@
 use crate::UnsignedVerifiableCredential;
 use crate::VerifiableCredential;
-use ed25519_dalek::{SigningKey, VerifyingKey};
+use crate::{SchemaSource, SigningKey, VerifyingKey};
 use js_sys::{Array, Reflect};
-use rand::rngs::OsRng;
 use serde::Serialize;
 use serde_wasm_bindgen::from_value;
 use wasm_bindgen::prelude::*;
@@ -110,8 +109,10 @@ pub fn sign(unsigned_vc: JsValue, private_key: &[u8]) -> Result<JsValue, JsError
         ))
     })?;
 
+    let signing_key = SigningKey::from_bytes(private_key)
+        .map_err(|e| JsError::new(&format!("Invalid private key: {}", e)))?;
     let signed = unsigned
-        .sign(private_key)
+        .sign(&signing_key)
         .map_err(|e| JsError::new(&format!("Signing failed: {}", e)))?;
 
     Ok(to_js_value(&signed)?)
@@ -126,7 +127,10 @@ pub fn verify(signed_vc: JsValue, public_key: &[u8]) -> Result<bool, JsError> {
         ))
     })?;
 
-    match vc.verify(public_key) {
+    let Ok(verifying_key) = VerifyingKey::from_bytes(public_key) else {
+        return Ok(false);
+    };
+    match vc.verify(&verifying_key) {
         Ok(_) => Ok(true),
         Err(_e) => Ok(false),
     }
@@ -146,13 +150,13 @@ pub fn verify_with_schema_check(
 
     let schema_value = serde_wasm_bindgen::from_value::<serde_json::Value>(schema)
         .map_err(|_| JsError::new("Failed to deserialize schema"))?;
-    if vc
-        .validate(&crate::SchemaSource::Inline(&schema_value))
-        .is_err()
-    {
+    if vc.validate(&SchemaSource::Inline(&schema_value)).is_err() {
         return Ok(false);
     }
-    match vc.verify(public_key) {
+    let Ok(verifying_key) = VerifyingKey::from_bytes(public_key) else {
+        return Ok(false);
+    };
+    match vc.verify(&verifying_key) {
         Ok(_) => Ok(true),
         Err(_e) => Ok(false),
     }
@@ -185,12 +189,11 @@ impl KeyPair {
 /// Generate a new keypair
 #[wasm_bindgen]
 pub fn generate_keypair() -> KeyPair {
-    let mut csprng = OsRng;
-    let signing_key = SigningKey::generate(&mut csprng);
-    let verifying_key: VerifyingKey = signing_key.verifying_key();
-    let signing_key_bytes = signing_key.to_bytes().to_vec();
-    let verifying_key_bytes = verifying_key.to_bytes().to_vec();
-    KeyPair::new(signing_key_bytes, verifying_key_bytes)
+    let keypair = crate::generate_keypair();
+    KeyPair::new(
+        keypair.signing_key.to_bytes().to_vec(),
+        keypair.verifying_key.to_bytes().to_vec(),
+    )
 }
 
 // protobuf encoding/decoding functions --------------------------------------------------------
@@ -200,13 +203,17 @@ pub fn sign_protobuf_vc(
     unsigned_vc_protobuf: &[u8],
     private_key: &[u8],
 ) -> Result<Vec<u8>, JsError> {
-    crate::bindings::protobuf::sign_protobuf_vc(unsigned_vc_protobuf, private_key)
+    let signing_key = SigningKey::from_bytes(private_key)
+        .map_err(|e| JsError::new(&format!("Invalid private key: {}", e)))?;
+    crate::bindings::protobuf::sign_protobuf_vc(unsigned_vc_protobuf, &signing_key)
         .map_err(|e| JsError::new(&format!("Protobuf signing failed: {}", e)))
 }
 
 #[wasm_bindgen]
 pub fn verify_protobuf_vc(signed_vc_protobuf: &[u8], public_key: &[u8]) -> Result<bool, JsError> {
-    crate::bindings::protobuf::verify_protobuf_vc(signed_vc_protobuf, public_key)
+    let verifying_key = VerifyingKey::from_bytes(public_key)
+        .map_err(|e| JsError::new(&format!("Invalid public key: {}", e)))?;
+    crate::bindings::protobuf::verify_protobuf_vc(signed_vc_protobuf, &verifying_key)
         .map(|_| true)
         .map_err(|e| JsError::new(&format!("Protobuf verification failed: {}", e)))
 }
@@ -215,13 +222,17 @@ pub fn verify_protobuf_vc(signed_vc_protobuf: &[u8], public_key: &[u8]) -> Resul
 
 #[wasm_bindgen]
 pub fn sign_cbor_vc(unsigned_vc_cbor: &[u8], private_key: &[u8]) -> Result<Vec<u8>, JsError> {
-    crate::bindings::cbor::sign_cbor_vc(unsigned_vc_cbor, private_key)
+    let signing_key = SigningKey::from_bytes(private_key)
+        .map_err(|e| JsError::new(&format!("Invalid private key: {}", e)))?;
+    crate::bindings::cbor::sign_cbor_vc(unsigned_vc_cbor, &signing_key)
         .map_err(|e| JsError::new(&format!("CBOR signing failed: {}", e)))
 }
 
 #[wasm_bindgen]
 pub fn verify_cbor_vc(signed_vc_cbor: &[u8], public_key: &[u8]) -> Result<bool, JsError> {
-    crate::bindings::cbor::verify_cbor_vc(signed_vc_cbor, public_key)
+    let verifying_key = VerifyingKey::from_bytes(public_key)
+        .map_err(|e| JsError::new(&format!("Invalid public key: {}", e)))?;
+    crate::bindings::cbor::verify_cbor_vc(signed_vc_cbor, &verifying_key)
         .map(|_| true)
         .map_err(|e| JsError::new(&format!("CBOR verification failed: {}", e)))
 }

@@ -1,7 +1,9 @@
+use crate::bindings::{sign_via, verify_via, CredentialCodec};
 use crate::proto_schemas::vc::UnsignedVerifiableCredential as ProtobufUnsignedVerifiableCredential;
 use crate::proto_schemas::vc::VerifiableCredential as ProtobufVerifiableCredential;
 use crate::UnsignedVerifiableCredential;
 use crate::VerifiableCredential;
+use crate::{SigningKey, VcError, VerifyingKey};
 use protobuf::Message;
 use protobuf_json_mapping::{
     parse_from_str as json_to_protobuf, print_to_string as protobuf_to_json,
@@ -9,18 +11,36 @@ use protobuf_json_mapping::{
 
 pub type ProtoResult<T> = Result<T, Box<dyn std::error::Error>>;
 
-fn protobuf_signed_to_domain(
-    protobuf: ProtobufVerifiableCredential,
-) -> ProtoResult<VerifiableCredential> {
-    let json = protobuf_to_json(&protobuf)?;
-    Ok(serde_json::from_str::<VerifiableCredential>(&json)?)
+/// The Protobuf serialization format.
+///
+/// Protobuf has no native dynamic JSON object, so credentials round-trip through the
+/// protobuf<->JSON canonical mapping rather than via serde directly.
+pub struct Protobuf;
+
+/// Wrap a format-specific error in [VcError::Codec].
+fn codec_err<E: std::error::Error + Send + Sync + 'static>(e: E) -> VcError {
+    VcError::Codec(Box::new(e))
 }
 
-fn protobuf_unsigned_to_domain(
-    protobuf: ProtobufUnsignedVerifiableCredential,
-) -> ProtoResult<UnsignedVerifiableCredential> {
-    let json = protobuf_to_json(&protobuf)?;
-    Ok(serde_json::from_str::<UnsignedVerifiableCredential>(&json)?)
+impl CredentialCodec for Protobuf {
+    fn decode_unsigned(bytes: &[u8]) -> Result<UnsignedVerifiableCredential, VcError> {
+        let protobuf =
+            ProtobufUnsignedVerifiableCredential::parse_from_bytes(bytes).map_err(codec_err)?;
+        let json = protobuf_to_json(&protobuf).map_err(codec_err)?;
+        Ok(serde_json::from_str(&json)?)
+    }
+
+    fn decode_signed(bytes: &[u8]) -> Result<VerifiableCredential, VcError> {
+        let protobuf = ProtobufVerifiableCredential::parse_from_bytes(bytes).map_err(codec_err)?;
+        let json = protobuf_to_json(&protobuf).map_err(codec_err)?;
+        Ok(serde_json::from_str(&json)?)
+    }
+
+    fn encode_signed(vc: &VerifiableCredential) -> Result<Vec<u8>, VcError> {
+        let json = serde_json::to_string(vc)?;
+        let protobuf: ProtobufVerifiableCredential = json_to_protobuf(&json).map_err(codec_err)?;
+        protobuf.write_to_bytes().map_err(codec_err)
+    }
 }
 
 /// Decode protobuf bytes into the protobuf-generated unsigned VC struct.
@@ -44,19 +64,20 @@ pub fn encode_signed_vc_to_protobuf(vc: &VerifiableCredential) -> ProtoResult<Ve
     Ok(protobuf.write_to_bytes()?)
 }
 
-/// Convenience wrapper: decode unsigned VC protobuf, sign with existing JSON-path logic, re-encode as protobuf.
-pub fn sign_protobuf_vc(unsigned_vc_protobuf: &[u8], private_key: &[u8]) -> ProtoResult<Vec<u8>> {
-    let protobuf_unsigned = decode_unsigned_vc_from_protobuf(unsigned_vc_protobuf)?;
-    let domain_unsigned = protobuf_unsigned_to_domain(protobuf_unsigned)?;
-    let signed = domain_unsigned.sign(private_key)?;
-    encode_signed_vc_to_protobuf(&signed)
+/// Convenience wrapper: decode unsigned VC protobuf, sign it, and re-encode as protobuf.
+pub fn sign_protobuf_vc(
+    unsigned_vc_protobuf: &[u8],
+    signing_key: &SigningKey,
+) -> Result<Vec<u8>, VcError> {
+    sign_via::<Protobuf>(unsigned_vc_protobuf, signing_key)
 }
 
-/// Convenience wrapper: decode signed VC protobuf and verify with existing JSON-path logic.
-pub fn verify_protobuf_vc(signed_vc_protobuf: &[u8], public_key: &[u8]) -> ProtoResult<()> {
-    let signed_vc = decode_signed_vc_from_protobuf(signed_vc_protobuf)?;
-    let signed_vc2 = protobuf_signed_to_domain(signed_vc)?;
-    Ok(signed_vc2.verify(public_key)?)
+/// Convenience wrapper: decode signed VC protobuf and verify its signature.
+pub fn verify_protobuf_vc(
+    signed_vc_protobuf: &[u8],
+    verifying_key: &VerifyingKey,
+) -> Result<(), VcError> {
+    verify_via::<Protobuf>(signed_vc_protobuf, verifying_key)
 }
 
 #[cfg(test)]
@@ -90,7 +111,7 @@ mod tests {
 
     #[test]
     fn test_sign_and_verify_roundtrip() {
-        let (private_key, public_key) = generate_keypair();
+        let keypair = generate_keypair();
 
         let unsigned_vc = sample_unsigned_vc();
         let json = serde_json::to_string(&unsigned_vc).expect("failed to serialize unsigned VC");
@@ -101,9 +122,10 @@ mod tests {
             .write_to_bytes()
             .expect("protobuf serialization failed");
 
-        let signed_bytes =
-            sign_protobuf_vc(&unsigned_bytes, &private_key).expect("protobuf signing failed");
+        let signed_bytes = sign_protobuf_vc(&unsigned_bytes, &keypair.signing_key)
+            .expect("protobuf signing failed");
 
-        verify_protobuf_vc(&signed_bytes, &public_key).expect("protobuf verification failed");
+        verify_protobuf_vc(&signed_bytes, &keypair.verifying_key)
+            .expect("protobuf verification failed");
     }
 }
