@@ -3,9 +3,26 @@ mod tests {
     use chrono::{DateTime, Duration, Utc};
     use url::Url;
     use verifiable_credential_toolkit::{
-        SchemaSource, SigningKey, UnsignedVerifiableCredential, VerifiableCredential,
-        VerifiablePresentation, VerifyingKey,
+        generate_keypair, Holder, Issuer, IssuerObject, SchemaSource, SigningKey,
+        UnsignedVerifiableCredential, VcError, VerifiableCredential, VerifiablePresentation,
+        VerifyingKey,
     };
+
+    /// Load the test signing key from disk.
+    fn signing_key() -> SigningKey {
+        SigningKey::from_bytes(
+            &std::fs::read("tests/test_data/keys/key.priv").expect("read private key"),
+        )
+        .expect("valid private key")
+    }
+
+    /// Load the test verifying key from disk.
+    fn verifying_key() -> VerifyingKey {
+        VerifyingKey::from_bytes(
+            &std::fs::read("tests/test_data/keys/key.pub").expect("read public key"),
+        )
+        .expect("valid public key")
+    }
 
     /// Test that a valid Verifiable Credential can be deserialized
     #[test]
@@ -52,11 +69,7 @@ mod tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
+        let private_key = signing_key();
 
         let signed_vc = vc.sign(&private_key).unwrap();
 
@@ -66,18 +79,8 @@ mod tests {
     /// Build a credential via the builder, then sign and verify it round-trip.
     #[test]
     fn build_sign_verify_with_builder() {
-        use verifiable_credential_toolkit::Issuer;
-
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
-        let public_key = VerifyingKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.pub")
-                .expect("Error reading public key from file"),
-        )
-        .expect("Invalid public key");
+        let private_key = signing_key();
+        let public_key = verifying_key();
 
         let vc = UnsignedVerifiableCredential::builder(
             vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
@@ -108,11 +111,7 @@ mod tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
+        let private_key = signing_key();
 
         let signed_vc = vc.sign(&private_key).expect("Failed to sign VC");
 
@@ -128,11 +127,7 @@ mod tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
+        let private_key = signing_key();
 
         let schema_str = include_str!("test_data/schemas/schema.json");
         let schema: serde_json::Value =
@@ -153,11 +148,7 @@ mod tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
+        let private_key = signing_key();
 
         let schema_str = include_str!("test_data/schemas/schema_fail.json");
         let schema: serde_json::Value =
@@ -167,35 +158,31 @@ mod tests {
             .validate(&SchemaSource::Inline(&schema))
             .and_then(|()| vc.sign(&private_key));
 
-        assert!(signed_vc.is_err());
+        assert!(matches!(signed_vc, Err(VcError::SchemaMismatch)));
     }
 
     #[test]
     fn signed_to_unsigned() {
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
+        let private_key = signing_key();
 
-        let vc: VerifiableCredential = serde_json::from_str::<UnsignedVerifiableCredential>(
-            include_str!("test_data/verifiable_credentials/unsigned.json"),
-        )
-        .expect("Failed to deserialize JSON")
-        .sign(&private_key)
-        .expect("Failed to sign VC");
+        let original_unsigned: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
+            "test_data/verifiable_credentials/unsigned.json"
+        ))
+        .expect("Failed to deserialize JSON");
 
-        let clone_vc = vc.clone();
-        let mut unsigned_vc = clone_vc.to_unsigned();
+        let vc = original_unsigned
+            .clone()
+            .sign(&private_key)
+            .expect("Failed to sign VC");
 
-        // Set id of unsigned_vc
+        // to_unsigned strips the proof and yields back the original credential
+        assert_eq!(vc.clone().to_unsigned(), original_unsigned);
+
+        // Re-signing a modified unsigned VC produces a different signed VC
+        let mut unsigned_vc = vc.clone().to_unsigned();
         unsigned_vc.id =
             Some(Url::parse("http://example.com/credentials/3732").expect("Invalid URL"));
-
         let new_signed_vc = unsigned_vc.sign(&private_key).expect("Failed to sign VC");
-
-        println!("{}", serde_json::to_string_pretty(&vc).unwrap());
-        println!("{}", serde_json::to_string_pretty(&new_signed_vc).unwrap());
 
         assert_ne!(vc, new_signed_vc);
     }
@@ -208,11 +195,7 @@ mod tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
+        let private_key = signing_key();
 
         let signed_vc = vc
             .validate(&SchemaSource::Url("https://json.schemastore.org/any.json"))
@@ -229,11 +212,7 @@ mod tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
+        let private_key = signing_key();
 
         let signed_vc = vc
             .validate(&SchemaSource::Url(
@@ -251,11 +230,7 @@ mod tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
+        let private_key = signing_key();
 
         let mut signed_vc = vc.sign(&private_key).unwrap();
 
@@ -285,11 +260,7 @@ mod tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
+        let private_key = signing_key();
 
         let mut signed_vc = vc.sign(&private_key).unwrap();
 
@@ -332,11 +303,7 @@ mod tests {
 
     #[test]
     fn verify_signed_verifiable_credential() {
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
+        let private_key = signing_key();
 
         let vc: VerifiableCredential = serde_json::from_str::<UnsignedVerifiableCredential>(
             include_str!("test_data/verifiable_credentials/unsigned.json"),
@@ -345,11 +312,7 @@ mod tests {
         .sign(&private_key)
         .expect("Failed to sign VC");
 
-        let public_key = VerifyingKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.pub")
-                .expect("Error reading public key from file"),
-        )
-        .expect("Invalid public key");
+        let public_key = verifying_key();
 
         let verify_result = vc.verify(&public_key);
 
@@ -362,11 +325,7 @@ mod tests {
 
     #[test]
     fn verify_denies_modified_verifiable_credential() {
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
+        let private_key = signing_key();
 
         let vc: VerifiableCredential = serde_json::from_str::<UnsignedVerifiableCredential>(
             include_str!("test_data/verifiable_credentials/unsigned.json"),
@@ -382,15 +341,14 @@ mod tests {
         let edited_vc: VerifiableCredential =
             serde_json::from_str(&vc_serialized).expect("Failed to deserialize JSON");
 
-        let public_key = VerifyingKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.pub")
-                .expect("Error reading public key from file"),
-        )
-        .expect("Invalid public key");
+        let public_key = verifying_key();
 
         let verify_result = edited_vc.verify(&public_key);
 
-        assert!(verify_result.is_err());
+        assert!(matches!(
+            verify_result,
+            Err(VcError::SignatureVerificationFailed(_))
+        ));
     }
 
     #[test]
@@ -408,16 +366,8 @@ mod tests {
 
     #[test]
     fn valid_from_verification_true_negative() {
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
-        let public_key = VerifyingKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.pub")
-                .expect("Error reading public key from file"),
-        )
-        .expect("Invalid public key");
+        let private_key = signing_key();
+        let public_key = verifying_key();
 
         let signed_vc = serde_json::from_str::<UnsignedVerifiableCredential>(include_str!(
             "test_data/verifiable_credentials/unsigned_validFrom_invalid.json"
@@ -428,21 +378,13 @@ mod tests {
 
         let verify_result = signed_vc.verify(&public_key);
 
-        assert!(verify_result.is_err());
+        assert!(matches!(verify_result, Err(VcError::NotYetValid)));
     }
 
     #[test]
     fn valid_until_verification_true_negative() {
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
-        let public_key = VerifyingKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.pub")
-                .expect("Error reading public key from file"),
-        )
-        .expect("Invalid public key");
+        let private_key = signing_key();
+        let public_key = verifying_key();
 
         let signed_vc = serde_json::from_str::<UnsignedVerifiableCredential>(include_str!(
             "test_data/verifiable_credentials/unsigned_validUntil_invalid.json"
@@ -453,21 +395,13 @@ mod tests {
 
         let verify_result = signed_vc.verify(&public_key);
 
-        assert!(verify_result.is_err());
+        assert!(matches!(verify_result, Err(VcError::Expired)));
     }
 
     #[test]
     fn valid_from_verification_true_positive() {
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
-        let public_key = VerifyingKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.pub")
-                .expect("Error reading public key from file"),
-        )
-        .expect("Invalid public key");
+        let private_key = signing_key();
+        let public_key = verifying_key();
 
         let signed_vc = serde_json::from_str::<UnsignedVerifiableCredential>(include_str!(
             "test_data/verifiable_credentials/unsigned_validFrom_valid.json"
@@ -483,16 +417,8 @@ mod tests {
 
     #[test]
     fn valid_until_verification_true_positive() {
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
-        let public_key = VerifyingKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.pub")
-                .expect("Error reading public key from file"),
-        )
-        .expect("Invalid public key");
+        let private_key = signing_key();
+        let public_key = verifying_key();
 
         let signed_vc = serde_json::from_str::<UnsignedVerifiableCredential>(include_str!(
             "test_data/verifiable_credentials/unsigned_validUntil_valid.json"
@@ -508,16 +434,8 @@ mod tests {
 
     #[test]
     fn validate_with_schema_check_true_positive() {
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
-        let public_key = VerifyingKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.pub")
-                .expect("Error reading public key from file"),
-        )
-        .expect("Invalid public key");
+        let private_key = signing_key();
+        let public_key = verifying_key();
 
         let vc: VerifiableCredential = serde_json::from_str::<UnsignedVerifiableCredential>(
             include_str!("test_data/verifiable_credentials/unsigned.json"),
@@ -539,16 +457,8 @@ mod tests {
 
     #[test]
     fn validate_with_schema_check_true_negative() {
-        let private_key = SigningKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.priv")
-                .expect("Error reading private key from file"),
-        )
-        .expect("Invalid private key");
-        let public_key = VerifyingKey::from_bytes(
-            &std::fs::read("tests/test_data/keys/key.pub")
-                .expect("Error reading public key from file"),
-        )
-        .expect("Invalid public key");
+        let private_key = signing_key();
+        let public_key = verifying_key();
 
         let vc: VerifiableCredential = serde_json::from_str::<UnsignedVerifiableCredential>(
             include_str!("test_data/verifiable_credentials/unsigned.json"),
@@ -565,6 +475,113 @@ mod tests {
             .validate(&SchemaSource::Inline(&schema))
             .and_then(|()| vc.verify(&public_key));
 
-        assert!(verify_result.is_err());
+        assert!(matches!(verify_result, Err(VcError::SchemaMismatch)));
+    }
+
+    /// Key newtypes reject anything that isn't exactly 32 bytes.
+    #[test]
+    fn key_from_bytes_rejects_wrong_length() {
+        assert!(matches!(
+            SigningKey::from_bytes(&[0u8; 31]),
+            Err(VcError::InvalidPrivateKeyLength)
+        ));
+        assert!(matches!(
+            SigningKey::from_bytes(&[0u8; 33]),
+            Err(VcError::InvalidPrivateKeyLength)
+        ));
+        assert!(matches!(
+            VerifyingKey::from_bytes(&[0u8; 31]),
+            Err(VcError::InvalidPublicKeyLength)
+        ));
+        // Exactly 32 bytes is accepted.
+        assert!(SigningKey::from_bytes(&[7u8; 32]).is_ok());
+        assert!(VerifyingKey::from_bytes(&[7u8; 32]).is_ok());
+    }
+
+    /// A well-formed signature verified against a different (valid) public key
+    /// fails with SignatureVerificationFailed — distinct from the tampered-payload path.
+    #[test]
+    fn verify_rejects_wrong_public_key() {
+        let signed_vc = serde_json::from_str::<UnsignedVerifiableCredential>(include_str!(
+            "test_data/verifiable_credentials/unsigned.json"
+        ))
+        .expect("Failed to deserialize JSON")
+        .sign(&signing_key())
+        .expect("Failed to sign VC");
+
+        // A different, valid keypair: the signature is well-formed but won't match.
+        let other = generate_keypair();
+        assert!(matches!(
+            signed_vc.verify(&other.verifying_key),
+            Err(VcError::SignatureVerificationFailed(_))
+        ));
+    }
+
+    /// Regression: `Holder::Url` must serialize as a bare string (untagged), not
+    /// `{"Url": "..."}`, and round-trip.
+    #[test]
+    fn holder_url_serializes_untagged_and_round_trips() {
+        let vp = VerifiablePresentation {
+            context: vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
+            id: None,
+            presentation_type: vec!["VerifiablePresentation".to_string()],
+            verifiable_credential: None,
+            holder: Some(Holder::Url(
+                Url::parse("https://example.com/holder").unwrap(),
+            )),
+        };
+
+        let json = serde_json::to_string(&vp).unwrap();
+        assert!(
+            json.contains(r#""holder":"https://example.com/holder""#),
+            "holder should be a bare string, got: {json}"
+        );
+        assert!(!json.contains(r#""Url""#), "holder should not be tagged");
+
+        let back: VerifiablePresentation = serde_json::from_str(&json).unwrap();
+        assert_eq!(vp, back);
+    }
+
+    /// The untagged `Issuer::Object` + `#[serde(flatten)]` additional properties
+    /// must serialize alongside `id` and round-trip.
+    #[test]
+    fn issuer_object_flatten_round_trips() {
+        use std::collections::HashMap;
+
+        let mut extra = HashMap::new();
+        extra.insert("name".to_string(), serde_json::json!("Acme Corp"));
+
+        let vc = UnsignedVerifiableCredential::builder(
+            vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
+            vec!["VerifiableCredential".to_string()],
+            Issuer::Object(IssuerObject {
+                id: Url::parse("https://example.com/issuer").unwrap(),
+                additional_properties: Some(extra),
+            }),
+            serde_json::json!({ "id": "urn:uuid:1" }),
+        )
+        .build();
+
+        let json = serde_json::to_string(&vc).unwrap();
+        assert!(json.contains(r#""name":"Acme Corp""#), "got: {json}");
+
+        let back: UnsignedVerifiableCredential = serde_json::from_str(&json).unwrap();
+        assert_eq!(vc, back);
+    }
+
+    /// A signed VC survives a JSON serialize -> deserialize round-trip unchanged.
+    #[test]
+    fn signed_vc_json_round_trips() {
+        let signed = serde_json::from_str::<UnsignedVerifiableCredential>(include_str!(
+            "test_data/verifiable_credentials/unsigned.json"
+        ))
+        .expect("Failed to deserialize JSON")
+        .sign(&signing_key())
+        .expect("Failed to sign VC");
+
+        let json = serde_json::to_string(&signed).unwrap();
+        let back: VerifiableCredential = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(signed, back);
     }
 }
