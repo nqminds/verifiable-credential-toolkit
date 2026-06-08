@@ -6,8 +6,13 @@
   "main": "index.ts",
   "scripts": {
     "build": "cargo build --target wasm32-unknown-unknown --release --manifest-path ../Cargo.toml && wasm-bindgen --target nodejs --out-dir pkg ../target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm && echo '{\"type\":\"commonjs\"}' > pkg/package.json",
-    "start": "node index.ts"
+    "start": "node index.ts",
+    "typecheck": "tsc --noEmit"
   },
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "typescript": "^5"
+  }
 }
