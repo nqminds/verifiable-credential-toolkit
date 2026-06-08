@@ -760,11 +760,13 @@ Working examples are included in the repository:
 | [`wasm_nodejs_example_usage/`](./wasm_nodejs_example_usage/) | Node.js signing, verification, and schema validation |
 | [`examples/`](./examples/)                                   | Rust examples (run with `cargo run --example`)       |
 
-Both examples are written in TypeScript and exercise the WASM API. The Node
-example covers the full surface (sign/verify, tamper + wrong-key rejection,
-JSON-Schema validation, validity periods, the `normalize_*` helpers, and the
-CBOR + Protobuf byte bindings) and self-checks every result. The browser
-example covers the JSON-object surface.
+Both examples are written in TypeScript and exercise the full WASM API:
+sign/verify, tamper + wrong-key rejection, JSON-Schema validation, validity
+periods, the `normalize_*` helpers, and the CBOR + Protobuf byte bindings. The
+Node example self-checks every result (and exits non-zero on failure); the
+browser example renders each result on the page. Both feed the CBOR/Protobuf
+bindings unsigned-VC byte fixtures encoded by the Rust side — the browser
+fetches them over HTTP, which is why that demo needs the dev server.
 
 ### Running the Node.js Example
 
