@@ -30,6 +30,7 @@ js-sys = "0.3.77"
 protobuf = "3.7.2"
 protobuf-json-mapping = "3.7.2"
 c2pa_cbor = "0.77.2"
+thiserror = "2"
 
 [target.'cfg(target_family = "wasm")'.dependencies]
 wasm-bindgen = { version = "0.2", features = ["serde"] }

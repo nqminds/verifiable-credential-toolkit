@@ -56,7 +56,7 @@ pub fn sign_protobuf_vc(unsigned_vc_protobuf: &[u8], private_key: &[u8]) -> Prot
 pub fn verify_protobuf_vc(signed_vc_protobuf: &[u8], public_key: &[u8]) -> ProtoResult<()> {
     let signed_vc = decode_signed_vc_from_protobuf(signed_vc_protobuf)?;
     let signed_vc2 = protobuf_signed_to_domain(signed_vc)?;
-    signed_vc2.verify(public_key)
+    Ok(signed_vc2.verify(public_key)?)
 }
 
 #[cfg(test)]

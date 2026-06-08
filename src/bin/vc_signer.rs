@@ -146,7 +146,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Successfully verified the verifiable credential!");
                     Ok(())
                 }
-                Err(err) => Err(err),
+                Err(err) => Err(err.into()),
             }
         }
     }

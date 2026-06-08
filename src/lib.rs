@@ -10,9 +10,12 @@ use std::collections::HashMap;
 use url::Url;
 
 pub mod bindings;
+pub mod error;
 pub mod proto_schemas;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
+
+pub use error::VcError;
 
 /// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - <https://www.w3.org/TR/vc-data-model-2.0> WITHOUT the proof
 #[serde_as]
@@ -291,19 +294,14 @@ pub enum SchemaSource<'a> {
 impl SchemaSource<'_> {
     /// Resolve the schema to a concrete JSON document, fetching it over HTTP if necessary.
     /// Returns `None` when no validation is requested.
-    fn resolve(&self) -> Result<Option<Value>, Box<dyn std::error::Error>> {
+    fn resolve(&self) -> Result<Option<Value>, VcError> {
         match self {
             SchemaSource::None => Ok(None),
             SchemaSource::Inline(schema) => Ok(Some(Value::clone(schema))),
             #[cfg(not(target_arch = "wasm32"))]
             SchemaSource::Url(url) => {
-                let response = reqwest::blocking::get(*url)
-                    .map_err(|e| format!("Failed to fetch schema from URL: {}", e))?;
-                let schema_text = response
-                    .text()
-                    .map_err(|e| format!("Failed to read schema text: {}", e))?;
-                let schema: Value = serde_json::from_str(&schema_text)
-                    .map_err(|e| format!("Failed to parse schema JSON: {}", e))?;
+                let schema_text = reqwest::blocking::get(*url)?.text()?;
+                let schema: Value = serde_json::from_str(&schema_text)?;
                 Ok(Some(schema))
             }
         }
@@ -311,25 +309,21 @@ impl SchemaSource<'_> {
 }
 
 /// Validate a `credentialSubject` against a [SchemaSource].
-fn validate_subject(
-    subject: &Value,
-    schema: &SchemaSource,
-) -> Result<(), Box<dyn std::error::Error>> {
+fn validate_subject(subject: &Value, schema: &SchemaSource) -> Result<(), VcError> {
     if let Some(schema) = schema.resolve()? {
         if !jsonschema::is_valid(&schema, subject) {
-            return Err("Credential subject does not match schema".into());
+            return Err(VcError::SchemaMismatch);
         }
     }
     Ok(())
 }
 
 /// Parse a 32-byte Ed25519 signing key from arbitrary byte input.
-fn signing_key_from_bytes(
-    private_key: impl AsRef<[u8]>,
-) -> Result<SigningKey, Box<dyn std::error::Error>> {
-    let private_key_array: [u8; 32] = private_key.as_ref().try_into().map_err(|_| {
-        "Invalid private key length: expected 32 bytes, but received a different size."
-    })?;
+fn signing_key_from_bytes(private_key: impl AsRef<[u8]>) -> Result<SigningKey, VcError> {
+    let private_key_array: [u8; 32] = private_key
+        .as_ref()
+        .try_into()
+        .map_err(|_| VcError::InvalidPrivateKeyLength)?;
     Ok(SigningKey::from_bytes(&private_key_array))
 }
 
@@ -338,7 +332,7 @@ impl UnsignedVerifiableCredential {
     ///
     /// Call this before [sign](UnsignedVerifiableCredential::sign) when you need
     /// schema validation, e.g. `vc.validate(&schema)?; vc.sign(key)?`.
-    pub fn validate(&self, schema: &SchemaSource) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn validate(&self, schema: &SchemaSource) -> Result<(), VcError> {
         validate_subject(&self.credential_subject, schema)
     }
 
@@ -347,13 +341,9 @@ impl UnsignedVerifiableCredential {
     ///
     /// This performs no schema validation; call
     /// [validate](UnsignedVerifiableCredential::validate) first if you need it.
-    pub fn sign(
-        self,
-        private_key: impl AsRef<[u8]>,
-    ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
+    pub fn sign(self, private_key: impl AsRef<[u8]>) -> Result<VerifiableCredential, VcError> {
         let signing_key = signing_key_from_bytes(private_key)?;
-        let message = serde_json::to_string(&self)
-            .map_err(|e| format!("Failed to serialize credential during sign: {}", e))?;
+        let message = serde_json::to_string(&self)?;
         let signature = signing_key.sign(message.as_bytes());
         let proof = Proof::new_ed25519(BASE64_STANDARD.encode(signature.to_bytes()));
 
@@ -374,50 +364,38 @@ impl VerifiableCredential {
     ///
     /// Call this alongside [verify](VerifiableCredential::verify) when you need
     /// schema validation, e.g. `vc.validate(&schema)?; vc.verify(key)?`.
-    pub fn validate(&self, schema: &SchemaSource) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn validate(&self, schema: &SchemaSource) -> Result<(), VcError> {
         self.unsigned.validate(schema)
     }
 
     /// Verifies the contents of a Verifiable Credential against a public key
-    pub fn verify(&self, public_key: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn verify(&self, public_key: &[u8]) -> Result<(), VcError> {
         let now = Utc::now();
 
         // Check if the current timestamp is within the validity period
         if let Some(valid_from) = self.unsigned.valid_from {
             if now < valid_from {
-                return Err("The credential is not yet valid (validFrom check failed).".into());
+                return Err(VcError::NotYetValid);
             }
         }
         if let Some(valid_until) = self.unsigned.valid_until {
             if now > valid_until {
-                return Err("The credential has expired (validUntil check failed).".into());
+                return Err(VcError::Expired);
             }
         }
 
-        let message = serde_json::to_string(&self.unsigned).map_err(|e| {
-            format!(
-                "Failed to serialize unsigned credential during verification: {}",
-                e
-            )
-        })?;
-        let proof_bytes = BASE64_STANDARD
-            .decode(&self.proof.proof_value)
-            .map_err(|e| format!("Failed to decode proof value from base64: {}", e))?;
-        let signature = Signature::from_slice(&proof_bytes)
-            .map_err(|e| format!("Failed to create signature from proof bytes: {}", e))?;
-        let public_key_array: [u8; 32] = public_key.try_into().map_err(|_| {
-            "Invalid public key length: expected 32 bytes, but received a different size."
-        })?;
-        let public_key = VerifyingKey::from_bytes(&public_key_array).map_err(|e| {
-            format!(
-                "Failed to create verifying key from public key bytes: {}",
-                e
-            )
-        })?;
+        let message = serde_json::to_string(&self.unsigned)?;
+        let proof_bytes = BASE64_STANDARD.decode(&self.proof.proof_value)?;
+        let signature = Signature::from_slice(&proof_bytes).map_err(VcError::MalformedSignature)?;
+        let public_key_array: [u8; 32] = public_key
+            .try_into()
+            .map_err(|_| VcError::InvalidPublicKeyLength)?;
+        let public_key =
+            VerifyingKey::from_bytes(&public_key_array).map_err(VcError::InvalidPublicKey)?;
 
         public_key
             .verify(message.as_bytes(), &signature)
-            .map_err(|e| format!("Failed to verify the credential signature: {}", e))?;
+            .map_err(VcError::SignatureVerificationFailed)?;
         Ok(())
     }
 }

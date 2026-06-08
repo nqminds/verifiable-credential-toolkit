@@ -38,7 +38,7 @@ pub fn verify_cbor_vc(
     public_key: &[u8],
 ) -> Result<(), Box<dyn std::error::Error + 'static>> {
     let decoded = decode_signed_vc_from_cbor(signed_vc_cbor)?;
-    decoded.verify(public_key)
+    Ok(decoded.verify(public_key)?)
 }
 
 #[cfg(test)]
