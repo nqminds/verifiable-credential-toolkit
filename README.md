@@ -760,39 +760,42 @@ Working examples are included in the repository:
 | [`wasm_nodejs_example_usage/`](./wasm_nodejs_example_usage/) | Node.js signing, verification, and schema validation |
 | [`examples/`](./examples/)                                   | Rust examples (run with `cargo run --example`)       |
 
-### Running the Browser Example
-
-```bash
-# Build WASM and generate browser bindings
-cargo build --target wasm32-unknown-unknown --release
-wasm-bindgen --target web --out-dir wasm_js_example_usage/pkg \
-  target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm
-
-# Serve the example
-cd wasm_js_example_usage
-python3 -m http.server 8080
-# Open http://localhost:8080 in your browser and check the console
-```
+Both examples are written in TypeScript and exercise the WASM API. The Node
+example covers the full surface (sign/verify, tamper + wrong-key rejection,
+JSON-Schema validation, validity periods, the `normalize_*` helpers, and the
+CBOR + Protobuf byte bindings) and self-checks every result. The browser
+example covers the JSON-object surface.
 
 ### Running the Node.js Example
 
 ```bash
 cd wasm_nodejs_example_usage
 
-# Build the WASM, generate Node.js bindings, and write pkg/package.json.
-# wasm-bindgen's `nodejs` target emits CommonJS, but this example dir is an
-# ES module ("type": "module"), so the generated pkg/ needs its own
-# package.json declaring "type": "commonjs". `npm run build` does all of this.
+# Builds the WASM, generates Node.js bindings, and writes pkg/package.json.
+# wasm-bindgen's `nodejs` target emits CommonJS, but this dir is an ES module
+# ("type": "module"), so pkg/ needs its own package.json declaring
+# "type": "commonjs". `npm run build` does all of this.
 npm run build
 
-# Run the example
-npm start          # or: node index.js
+# Run it (Node >= 22 runs the .ts directly by stripping the types)
+npm start          # or: node index.ts
 ```
 
 If you build by hand instead of `npm run build`, remember the final step:
 
 ```bash
 echo '{"type":"commonjs"}' > wasm_nodejs_example_usage/pkg/package.json
+```
+
+### Running the Browser Example
+
+```bash
+cd wasm_js_example_usage
+
+npm install        # one-time: installs the TypeScript compiler
+npm run build      # builds WASM (--target web) and compiles index.ts -> index.js
+npm run serve      # python3 -m http.server 8080
+# Open http://localhost:8080 in your browser; results render on the page.
 ```
 
 ### Running the Rust Examples
