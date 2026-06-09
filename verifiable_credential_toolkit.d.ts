@@ -89,7 +89,20 @@ export function verify_with_schema_check(
   schema: any
 ): boolean;
 
-// CBOR bindings: operate on CBOR-encoded credential bytes.
+// CBOR bindings: encode/decode credentials to and from CBOR bytes, and sign/verify
+// CBOR-encoded credential bytes.
+export function encode_unsigned_vc_to_cbor(
+  unsigned_vc: UnsignedVerifiableCredential
+): Uint8Array;
+export function encode_signed_vc_to_cbor(
+  signed_vc: VerifiableCredential
+): Uint8Array;
+export function decode_unsigned_vc_from_cbor(
+  unsigned_vc_cbor: Uint8Array
+): UnsignedVerifiableCredential;
+export function decode_signed_vc_from_cbor(
+  signed_vc_cbor: Uint8Array
+): VerifiableCredential;
 export function sign_cbor_vc(
   unsigned_vc_cbor: Uint8Array,
   private_key: SigningKey
@@ -99,7 +112,20 @@ export function verify_cbor_vc(
   public_key: VerifyingKey
 ): boolean;
 
-// Protobuf bindings: operate on Protobuf-encoded credential bytes.
+// Protobuf bindings: encode/decode credentials to and from Protobuf bytes, and
+// sign/verify Protobuf-encoded credential bytes.
+export function encode_unsigned_vc_to_protobuf(
+  unsigned_vc: UnsignedVerifiableCredential
+): Uint8Array;
+export function encode_signed_vc_to_protobuf(
+  signed_vc: VerifiableCredential
+): Uint8Array;
+export function decode_unsigned_vc_from_protobuf(
+  unsigned_vc_protobuf: Uint8Array
+): UnsignedVerifiableCredential;
+export function decode_signed_vc_from_protobuf(
+  signed_vc_protobuf: Uint8Array
+): VerifiableCredential;
 export function sign_protobuf_vc(
   unsigned_vc_protobuf: Uint8Array,
   private_key: SigningKey

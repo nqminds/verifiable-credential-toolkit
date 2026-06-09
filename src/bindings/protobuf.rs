@@ -8,13 +8,17 @@ use protobuf::Message;
 use protobuf_json_mapping::{
     parse_from_str as json_to_protobuf, print_to_string as protobuf_to_json,
 };
+use serde::Serialize;
+use serde_json::Value;
 
 pub type ProtoResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 /// The Protobuf serialization format.
 ///
-/// Protobuf has no native dynamic JSON object, so credentials round-trip through the
-/// protobuf<->JSON canonical mapping rather than via serde directly.
+/// The wire schema (`vc.proto`) is typed, but the bridge between Rust and protobuf
+/// still goes through the protobuf<->JSON canonical mapping: protobuf cannot natively
+/// represent the dynamic-object fields (`credentialSubject`, polymorphic `issuer`,
+/// etc.), and routing through JSON lets serde and the mapping agree on those.
 pub struct Protobuf;
 
 /// Wrap a format-specific error in [VcError::Codec].
@@ -37,10 +41,69 @@ impl CredentialCodec for Protobuf {
     }
 
     fn encode_signed(vc: &VerifiableCredential) -> Result<Vec<u8>, VcError> {
-        let json = serde_json::to_string(vc)?;
-        let protobuf: ProtobufVerifiableCredential = json_to_protobuf(&json).map_err(codec_err)?;
-        protobuf.write_to_bytes().map_err(codec_err)
+        encode_to_protobuf::<_, ProtobufVerifiableCredential>(vc)
     }
+}
+
+/// Wrap a bare value in a single-element array, leaving existing arrays untouched.
+///
+/// Rust's `OneOrMany` serializes a single-element list as a scalar, but protobuf's
+/// canonical JSON mapping requires arrays for `repeated` fields. This bridges the gap.
+fn coerce_to_array(slot: Option<&mut Value>) {
+    if let Some(v) = slot {
+        if !v.is_array() && !v.is_null() {
+            *v = Value::Array(vec![v.take()]);
+        }
+    }
+}
+
+/// Reconcile a credential's serde JSON with what protobuf's canonical JSON mapping
+/// expects, before encoding.
+///
+/// Two mismatches are handled:
+/// - serde's `OneOrMany` emits a single-element list as a scalar, but `repeated`
+///   protobuf fields require arrays. Field paths here must match the `repeated`
+///   fields in `vc.proto`.
+/// - serde emits the credential's optional top-level `id` as an explicit `null` when
+///   absent (it has no `skip_serializing_if`), but protobuf rejects `null` for a
+///   scalar `string`. Dropping top-level `null` keys maps "absent" to "unset". Only
+///   typed scalar/message fields live at the top level, so the dynamic `Value` fields
+///   (which may legitimately carry `null`) are never recursed into here.
+fn normalize_for_protobuf(value: &mut Value) {
+    let Some(obj) = value.as_object_mut() else {
+        return;
+    };
+
+    obj.retain(|_, v| !v.is_null());
+
+    // Top-level OneOrMany fields.
+    coerce_to_array(obj.get_mut("type"));
+    coerce_to_array(obj.get_mut("credentialSchema"));
+
+    if let Some(status) = obj
+        .get_mut("credentialStatus")
+        .and_then(Value::as_object_mut)
+    {
+        coerce_to_array(status.get_mut("type"));
+    }
+
+    if let Some(proof) = obj.get_mut("proof").and_then(Value::as_object_mut) {
+        coerce_to_array(proof.get_mut("domain"));
+        coerce_to_array(proof.get_mut("nonce"));
+    }
+}
+
+/// Serialize a Rust credential type into protobuf bytes for message `M`, routing
+/// through the normalized protobuf<->JSON mapping.
+fn encode_to_protobuf<S, M>(value: &S) -> Result<Vec<u8>, VcError>
+where
+    S: Serialize,
+    M: protobuf::MessageFull,
+{
+    let mut json = serde_json::to_value(value)?;
+    normalize_for_protobuf(&mut json);
+    let protobuf: M = json_to_protobuf(&serde_json::to_string(&json)?).map_err(codec_err)?;
+    protobuf.write_to_bytes().map_err(codec_err)
 }
 
 /// Decode protobuf bytes into the protobuf-generated unsigned VC struct.
@@ -57,11 +120,14 @@ pub fn decode_signed_vc_from_protobuf(bytes: &[u8]) -> ProtoResult<ProtobufVerif
     Ok(ProtobufVerifiableCredential::parse_from_bytes(bytes)?)
 }
 
+/// Encode an unsigned VC Rust struct into protobuf bytes.
+pub fn encode_unsigned_vc_to_protobuf(vc: &UnsignedVerifiableCredential) -> ProtoResult<Vec<u8>> {
+    Ok(encode_to_protobuf::<_, ProtobufUnsignedVerifiableCredential>(vc)?)
+}
+
 /// Encode the existing signed VC Rust struct into protobuf bytes.
 pub fn encode_signed_vc_to_protobuf(vc: &VerifiableCredential) -> ProtoResult<Vec<u8>> {
-    let json = serde_json::to_string(vc)?;
-    let protobuf: ProtobufVerifiableCredential = json_to_protobuf(&json)?;
-    Ok(protobuf.write_to_bytes()?)
+    Ok(encode_to_protobuf::<_, ProtobufVerifiableCredential>(vc)?)
 }
 
 /// Convenience wrapper: decode unsigned VC protobuf, sign it, and re-encode as protobuf.
@@ -83,10 +149,7 @@ pub fn verify_protobuf_vc(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        generate_keypair, proto_schemas::vc::UnsignedVerifiableCredential as ProtobufUnsigned,
-    };
-    use protobuf::Message;
+    use crate::generate_keypair;
     use serde_json::json;
 
     fn sample_unsigned_vc() -> UnsignedVerifiableCredential {
@@ -114,18 +177,53 @@ mod tests {
         let keypair = generate_keypair();
 
         let unsigned_vc = sample_unsigned_vc();
-        let json = serde_json::to_string(&unsigned_vc).expect("failed to serialize unsigned VC");
-
-        let protobuf: ProtobufUnsigned =
-            protobuf_json_mapping::parse_from_str(&json).expect("json->protobuf conversion failed");
-        let unsigned_bytes = protobuf
-            .write_to_bytes()
-            .expect("protobuf serialization failed");
+        let unsigned_bytes =
+            encode_unsigned_vc_to_protobuf(&unsigned_vc).expect("unsigned encode failed");
 
         let signed_bytes = sign_protobuf_vc(&unsigned_bytes, &keypair.signing_key)
             .expect("protobuf signing failed");
 
         verify_protobuf_vc(&signed_bytes, &keypair.verifying_key)
             .expect("protobuf verification failed");
+    }
+
+    /// A single-element `type` and a single `credentialSchema` object must still
+    /// round-trip: serde emits them as scalars, and the codec must coerce them to
+    /// arrays for the typed `repeated` protobuf fields.
+    #[test]
+    fn test_single_element_oneormany_roundtrip() {
+        let keypair = generate_keypair();
+
+        let unsigned_vc: UnsignedVerifiableCredential = serde_json::from_value(json!({
+          "@context": ["https://www.w3.org/ns/credentials/v2"],
+          "type": "VerifiableCredential",
+          "issuer": "https://www.example.com/",
+          "credentialSchema": { "id": "https://www.example.com/foo.json", "type": "JsonSchema" },
+          "credentialSubject": { "id": "subject-id" }
+        }))
+        .expect("sample unsigned VC should deserialize");
+
+        let unsigned_bytes =
+            encode_unsigned_vc_to_protobuf(&unsigned_vc).expect("unsigned encode failed");
+        let signed_bytes = sign_protobuf_vc(&unsigned_bytes, &keypair.signing_key)
+            .expect("protobuf signing failed");
+
+        verify_protobuf_vc(&signed_bytes, &keypair.verifying_key)
+            .expect("protobuf verification failed");
+
+        // The decoded credential must preserve the single-element shapes.
+        let decoded = Protobuf::decode_signed(&signed_bytes).expect("decode failed");
+        assert_eq!(
+            decoded.unsigned.credential_type,
+            vec!["VerifiableCredential"]
+        );
+        assert_eq!(
+            decoded
+                .unsigned
+                .credential_schema
+                .as_deref()
+                .map(<[_]>::len),
+            Some(1)
+        );
     }
 }

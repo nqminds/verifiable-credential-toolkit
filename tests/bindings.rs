@@ -1,7 +1,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 
 use c2pa_cbor::to_vec;
-use protobuf::Message;
 use verifiable_credential_toolkit::{
     bindings::{
         cbor::{
@@ -10,10 +9,11 @@ use verifiable_credential_toolkit::{
         },
         protobuf::{
             decode_signed_vc_from_protobuf, decode_unsigned_vc_from_protobuf,
-            encode_signed_vc_to_protobuf, sign_protobuf_vc, verify_protobuf_vc,
+            encode_signed_vc_to_protobuf, encode_unsigned_vc_to_protobuf, sign_protobuf_vc,
+            verify_protobuf_vc, Protobuf,
         },
+        CredentialCodec,
     },
-    proto_schemas::vc::UnsignedVerifiableCredential as ProtobufUnsignedVerifiableCredential,
     SigningKey, UnsignedVerifiableCredential, VerifiableCredential, VerifyingKey,
 };
 
@@ -46,14 +46,7 @@ fn sample_signed_vc(private_key: &SigningKey) -> VerifiableCredential {
 }
 
 fn unsigned_vc_to_protobuf_bytes(vc: &UnsignedVerifiableCredential) -> Vec<u8> {
-    let json = serde_json::to_string(vc).expect("Failed to serialize VC to JSON");
-    let protobuf: ProtobufUnsignedVerifiableCredential =
-        protobuf_json_mapping::parse_from_str(&json)
-            .expect("Failed to convert JSON to protobuf struct");
-
-    protobuf
-        .write_to_bytes()
-        .expect("Failed to serialize protobuf struct")
+    encode_unsigned_vc_to_protobuf(vc).expect("Failed to encode unsigned VC to protobuf")
 }
 
 #[test]
@@ -124,6 +117,12 @@ fn protobuf_encode_and_verify_roundtrip() {
     let signed_vc = sample_signed_vc(&private_key);
     let protobuf_bytes =
         encode_signed_vc_to_protobuf(&signed_vc).expect("Failed to encode signed VC");
+
+    // The typed schema must round-trip the credential without loss: decoding the
+    // protobuf bytes back into the domain type reproduces the original exactly.
+    let decoded: VerifiableCredential = Protobuf::decode_signed(&protobuf_bytes)
+        .expect("Failed to decode signed VC into domain type");
+    assert_eq!(signed_vc, decoded);
 
     assert!(decode_signed_vc_from_protobuf(&protobuf_bytes).is_ok());
     verify_protobuf_vc(&protobuf_bytes, &public_key).expect("Protobuf verification failed");

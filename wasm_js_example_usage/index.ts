@@ -1,9 +1,5 @@
 // Browser example — exercises the full WASM API surface (including the CBOR and
-// Protobuf byte bindings) and reports each result on the page.
-//
-// The CBOR / Protobuf sections fetch unsigned-VC byte fixtures (encoded by the
-// Rust side) over HTTP, so they require the dev server — opening the file
-// directly via file:// will fail the fetch.
+// Protobuf encode/decode/sign/verify bindings) and reports each result on the page.
 //
 // Build & serve (from this directory):
 //   npm install          # one-time: installs the TypeScript compiler
@@ -18,8 +14,16 @@ import init, {
   verify_with_schema_check,
   normalize_object,
   normalize_and_stringify,
+  encode_unsigned_vc_to_cbor,
+  encode_signed_vc_to_cbor,
+  decode_unsigned_vc_from_cbor,
+  decode_signed_vc_from_cbor,
   sign_cbor_vc,
   verify_cbor_vc,
+  encode_unsigned_vc_to_protobuf,
+  encode_signed_vc_to_protobuf,
+  decode_unsigned_vc_from_protobuf,
+  decode_signed_vc_from_protobuf,
   sign_protobuf_vc,
   verify_protobuf_vc,
 } from "./pkg/verifiable_credential_toolkit.js";
@@ -42,10 +46,6 @@ function section(title: string): void {
 }
 function show(value: unknown): void {
   output.innerHTML += `<pre>${JSON.stringify(value, null, 2)}</pre>`;
-}
-async function fetchBytes(path: string): Promise<Uint8Array> {
-  const response = await fetch(path);
-  return new Uint8Array(await response.arrayBuffer());
 }
 function flipMiddleByte(bytes: Uint8Array): Uint8Array {
   const copy = bytes.slice();
@@ -130,13 +130,30 @@ async function run(): Promise<void> {
   );
 
   // ── 8. CBOR bindings ──────────────────────────────────────────────────────
-  // The unsigned credential is fetched as a fixture encoded by the Rust side
-  // (google.protobuf.Value / canonical CBOR are impractical to hand-encode here).
+  // Full round-trip in JS: encode the credential object to bytes, decode it back,
+  // sign, verify, and re-encode the decoded credential.
   section("8. CBOR bindings");
-  const unsignedCbor = await fetchBytes("./fixtures/unsigned_vc.cbor");
+  const unsignedCbor = encode_unsigned_vc_to_cbor(baseVC);
+  check(
+    "encode_unsigned_vc_to_cbor returns bytes",
+    unsignedCbor instanceof Uint8Array && unsignedCbor.length > 0,
+  );
+  const decodedUnsignedCbor = decode_unsigned_vc_from_cbor(unsignedCbor);
+  check(
+    "decode_unsigned_vc_from_cbor round-trips the credential",
+    JSON.stringify(decodedUnsignedCbor.type) === JSON.stringify(baseVC.type),
+  );
   const signedCbor = sign_cbor_vc(unsignedCbor, signingKey);
-  check("sign_cbor_vc returns bytes", signedCbor instanceof Uint8Array && signedCbor.length > 0);
   check("verify_cbor_vc succeeds", verify_cbor_vc(signedCbor, verifyingKey) === true);
+  const decodedSignedCbor = decode_signed_vc_from_cbor(signedCbor);
+  check(
+    "decode_signed_vc_from_cbor exposes the proof",
+    typeof decodedSignedCbor.proof?.proofValue === "string",
+  );
+  check(
+    "re-encoding the decoded signed credential still verifies",
+    verify_cbor_vc(encode_signed_vc_to_cbor(decodedSignedCbor), verifyingKey) === true,
+  );
   let cborRejected = false;
   try {
     verify_cbor_vc(flipMiddleByte(signedCbor), verifyingKey);
@@ -146,11 +163,29 @@ async function run(): Promise<void> {
   check("tampered CBOR is rejected", cborRejected);
 
   // ── 9. Protobuf bindings ──────────────────────────────────────────────────
+  // Identical round-trip via Protobuf, again entirely from the JS credential object.
   section("9. Protobuf bindings");
-  const unsignedPb = await fetchBytes("./fixtures/unsigned_vc.pb");
+  const unsignedPb = encode_unsigned_vc_to_protobuf(baseVC);
+  check(
+    "encode_unsigned_vc_to_protobuf returns bytes",
+    unsignedPb instanceof Uint8Array && unsignedPb.length > 0,
+  );
+  const decodedUnsignedPb = decode_unsigned_vc_from_protobuf(unsignedPb);
+  check(
+    "decode_unsigned_vc_from_protobuf round-trips the credential",
+    JSON.stringify(decodedUnsignedPb.type) === JSON.stringify(baseVC.type),
+  );
   const signedPb = sign_protobuf_vc(unsignedPb, signingKey);
-  check("sign_protobuf_vc returns bytes", signedPb instanceof Uint8Array && signedPb.length > 0);
   check("verify_protobuf_vc succeeds", verify_protobuf_vc(signedPb, verifyingKey) === true);
+  const decodedSignedPb = decode_signed_vc_from_protobuf(signedPb);
+  check(
+    "decode_signed_vc_from_protobuf exposes the proof",
+    typeof decodedSignedPb.proof?.proofValue === "string",
+  );
+  check(
+    "re-encoding the decoded signed credential still verifies",
+    verify_protobuf_vc(encode_signed_vc_to_protobuf(decodedSignedPb), verifyingKey) === true,
+  );
   let pbRejected = false;
   try {
     verify_protobuf_vc(flipMiddleByte(signedPb), verifyingKey);

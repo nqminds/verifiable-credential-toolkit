@@ -762,11 +762,11 @@ Working examples are included in the repository:
 
 Both examples are written in TypeScript and exercise the full WASM API:
 sign/verify, tamper + wrong-key rejection, JSON-Schema validation, validity
-periods, the `normalize_*` helpers, and the CBOR + Protobuf byte bindings. The
-Node example self-checks every result (and exits non-zero on failure); the
-browser example renders each result on the page. Both feed the CBOR/Protobuf
-bindings unsigned-VC byte fixtures encoded by the Rust side — the browser
-fetches them over HTTP, which is why that demo needs the dev server.
+periods, the `normalize_*` helpers, and the CBOR + Protobuf bindings. The
+CBOR/Protobuf sections do a full round-trip entirely in JS — encoding the
+credential object to bytes, decoding it back, signing, and verifying — so no
+pre-encoded fixtures are needed. The Node example self-checks every result (and
+exits non-zero on failure); the browser example renders each result on the page.
 
 ### Running the Node.js Example
 

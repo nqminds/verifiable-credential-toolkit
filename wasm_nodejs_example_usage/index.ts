@@ -9,7 +9,6 @@
 // CommonJS, while this directory is an ES module ("type": "module"); the build
 // script writes pkg/package.json with "type": "commonjs" so the import works.
 
-import { readFileSync } from "node:fs";
 import {
   generate_keypair,
   sign,
@@ -17,8 +16,16 @@ import {
   verify_with_schema_check,
   normalize_object,
   normalize_and_stringify,
+  encode_unsigned_vc_to_cbor,
+  encode_signed_vc_to_cbor,
+  decode_unsigned_vc_from_cbor,
+  decode_signed_vc_from_cbor,
   sign_cbor_vc,
   verify_cbor_vc,
+  encode_unsigned_vc_to_protobuf,
+  encode_signed_vc_to_protobuf,
+  decode_unsigned_vc_from_protobuf,
+  decode_signed_vc_from_protobuf,
   sign_protobuf_vc,
   verify_protobuf_vc,
 } from "./pkg/verifiable_credential_toolkit.js";
@@ -36,9 +43,6 @@ function check(label: string, ok: boolean): void {
 }
 function section(title: string): void {
   console.log(`\n=== ${title} ===`);
-}
-function fixture(relativePath: string): Uint8Array {
-  return new Uint8Array(readFileSync(new URL(relativePath, import.meta.url)));
 }
 function flipMiddleByte(bytes: Uint8Array): Uint8Array {
   const copy = bytes.slice();
@@ -143,18 +147,33 @@ check(
 );
 
 // ── 8. CBOR bindings ──────────────────────────────────────────────────────
-// The unsigned credential is loaded from a fixture encoded by the Rust side
-// (google.protobuf.Value / canonical CBOR are impractical to hand-encode in JS).
+// Full round-trip, all in JS: encode the credential object to bytes, decode it
+// back, sign, verify, and re-encode the decoded credential.
 section("8. CBOR bindings");
-const unsignedCbor = fixture("./fixtures/unsigned_vc.cbor");
-const signedCbor = sign_cbor_vc(unsignedCbor, signingKey);
+const unsignedCbor = encode_unsigned_vc_to_cbor(baseVC);
 check(
-  "sign_cbor_vc returns bytes",
-  signedCbor instanceof Uint8Array && signedCbor.length > 0,
+  "encode_unsigned_vc_to_cbor returns bytes",
+  unsignedCbor instanceof Uint8Array && unsignedCbor.length > 0,
 );
+const decodedUnsignedCbor = decode_unsigned_vc_from_cbor(unsignedCbor);
+check(
+  "decode_unsigned_vc_from_cbor round-trips the credential",
+  JSON.stringify(decodedUnsignedCbor.type) === JSON.stringify(baseVC.type),
+);
+const signedCbor = sign_cbor_vc(unsignedCbor, signingKey);
 check(
   "verify_cbor_vc succeeds",
   verify_cbor_vc(signedCbor, verifyingKey) === true,
+);
+const decodedSignedCbor = decode_signed_vc_from_cbor(signedCbor);
+check(
+  "decode_signed_vc_from_cbor exposes the proof",
+  typeof decodedSignedCbor.proof?.proofValue === "string",
+);
+check(
+  "re-encoding the decoded signed credential still verifies",
+  verify_cbor_vc(encode_signed_vc_to_cbor(decodedSignedCbor), verifyingKey) ===
+    true,
 );
 let cborRejected = false;
 try {
@@ -165,16 +184,34 @@ try {
 check("tampered CBOR is rejected", cborRejected);
 
 // ── 9. Protobuf bindings ──────────────────────────────────────────────────
+// Identical round-trip via Protobuf, again entirely from the JS credential object.
 section("9. Protobuf bindings");
-const unsignedPb = fixture("./fixtures/unsigned_vc.pb");
-const signedPb = sign_protobuf_vc(unsignedPb, signingKey);
+const unsignedPb = encode_unsigned_vc_to_protobuf(baseVC);
 check(
-  "sign_protobuf_vc returns bytes",
-  signedPb instanceof Uint8Array && signedPb.length > 0,
+  "encode_unsigned_vc_to_protobuf returns bytes",
+  unsignedPb instanceof Uint8Array && unsignedPb.length > 0,
 );
+const decodedUnsignedPb = decode_unsigned_vc_from_protobuf(unsignedPb);
+check(
+  "decode_unsigned_vc_from_protobuf round-trips the credential",
+  JSON.stringify(decodedUnsignedPb.type) === JSON.stringify(baseVC.type),
+);
+const signedPb = sign_protobuf_vc(unsignedPb, signingKey);
 check(
   "verify_protobuf_vc succeeds",
   verify_protobuf_vc(signedPb, verifyingKey) === true,
+);
+const decodedSignedPb = decode_signed_vc_from_protobuf(signedPb);
+check(
+  "decode_signed_vc_from_protobuf exposes the proof",
+  typeof decodedSignedPb.proof?.proofValue === "string",
+);
+check(
+  "re-encoding the decoded signed credential still verifies",
+  verify_protobuf_vc(
+    encode_signed_vc_to_protobuf(decodedSignedPb),
+    verifyingKey,
+  ) === true,
 );
 let pbRejected = false;
 try {

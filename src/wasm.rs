@@ -1,3 +1,4 @@
+use crate::bindings::{cbor::Cbor, protobuf::Protobuf, CredentialCodec};
 use crate::UnsignedVerifiableCredential;
 use crate::VerifiableCredential;
 use crate::{SchemaSource, SigningKey, VerifyingKey};
@@ -10,6 +11,38 @@ use wasm_bindgen::prelude::*;
 fn to_js_value<T: Serialize>(value: &T) -> Result<JsValue, serde_wasm_bindgen::Error> {
     let serializer = serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true);
     value.serialize(&serializer)
+}
+
+/// Round-trip a JS value through `JSON.stringify`/`parse` and strip `undefined`s,
+/// yielding a clean object ready to deserialize into a Rust domain type.
+fn clean_js_value(input: &JsValue) -> Result<JsValue, JsError> {
+    let json_str =
+        js_sys::JSON::stringify(input).map_err(|_| JsError::new("Failed to stringify input"))?;
+    let clean_obj = js_sys::JSON::parse(
+        &json_str
+            .as_string()
+            .ok_or_else(|| JsError::new("Failed to get string"))?,
+    )
+    .map_err(|_| JsError::new("Failed to parse JSON"))?;
+    normalize_object(&clean_obj)
+}
+
+/// Deserialize a JS object into an [UnsignedVerifiableCredential].
+fn unsigned_vc_from_js(input: &JsValue) -> Result<UnsignedVerifiableCredential, JsError> {
+    from_value(clean_js_value(input)?).map_err(|e| {
+        JsError::new(&format!(
+            "Failed to deserialize unsigned verifiable credential: {e}"
+        ))
+    })
+}
+
+/// Deserialize a JS object into a [VerifiableCredential].
+fn signed_vc_from_js(input: &JsValue) -> Result<VerifiableCredential, JsError> {
+    from_value(clean_js_value(input)?).map_err(|e| {
+        JsError::new(&format!(
+            "Failed to deserialize signed verifiable credential: {e}"
+        ))
+    })
 }
 
 // Helper function to normalize a JS object by removing undefined values
@@ -88,26 +121,7 @@ pub fn normalize_and_stringify(input: &JsValue) -> Result<String, JsError> {
 
 #[wasm_bindgen]
 pub fn sign(unsigned_vc: JsValue, private_key: &[u8]) -> Result<JsValue, JsError> {
-    // First convert to JSON and back to ensure we have a clean object
-    let json_str = js_sys::JSON::stringify(&unsigned_vc)
-        .map_err(|_| JsError::new("Failed to stringify input"))?;
-    let clean_obj = js_sys::JSON::parse(
-        &json_str
-            .as_string()
-            .ok_or_else(|| JsError::new("Failed to get string"))?,
-    )
-    .map_err(|_| JsError::new("Failed to parse JSON"))?;
-
-    // Then normalize to remove undefined values
-    let normalized_vc = normalize_object(&clean_obj)?;
-
-    // Process with the normalized value
-    let unsigned: UnsignedVerifiableCredential = from_value(normalized_vc).map_err(|e| {
-        JsError::new(&format!(
-            "Failed to deserialize unsigned verifiable credential: {}",
-            e
-        ))
-    })?;
+    let unsigned = unsigned_vc_from_js(&unsigned_vc)?;
 
     let signing_key = SigningKey::from_bytes(private_key)
         .map_err(|e| JsError::new(&format!("Invalid private key: {}", e)))?;
@@ -198,6 +212,38 @@ pub fn generate_keypair() -> KeyPair {
 
 // protobuf encoding/decoding functions --------------------------------------------------------
 
+/// Encode an unsigned credential (JS object) to Protobuf bytes.
+#[wasm_bindgen]
+pub fn encode_unsigned_vc_to_protobuf(unsigned_vc: JsValue) -> Result<Vec<u8>, JsError> {
+    let unsigned = unsigned_vc_from_js(&unsigned_vc)?;
+    crate::bindings::protobuf::encode_unsigned_vc_to_protobuf(&unsigned)
+        .map_err(|e| JsError::new(&format!("Protobuf encoding failed: {e}")))
+}
+
+/// Encode a signed credential (JS object) to Protobuf bytes.
+#[wasm_bindgen]
+pub fn encode_signed_vc_to_protobuf(signed_vc: JsValue) -> Result<Vec<u8>, JsError> {
+    let signed = signed_vc_from_js(&signed_vc)?;
+    crate::bindings::protobuf::encode_signed_vc_to_protobuf(&signed)
+        .map_err(|e| JsError::new(&format!("Protobuf encoding failed: {e}")))
+}
+
+/// Decode Protobuf bytes into an unsigned credential (JS object).
+#[wasm_bindgen]
+pub fn decode_unsigned_vc_from_protobuf(unsigned_vc_protobuf: &[u8]) -> Result<JsValue, JsError> {
+    let unsigned = Protobuf::decode_unsigned(unsigned_vc_protobuf)
+        .map_err(|e| JsError::new(&format!("Protobuf decoding failed: {e}")))?;
+    Ok(to_js_value(&unsigned)?)
+}
+
+/// Decode Protobuf bytes into a signed credential (JS object).
+#[wasm_bindgen]
+pub fn decode_signed_vc_from_protobuf(signed_vc_protobuf: &[u8]) -> Result<JsValue, JsError> {
+    let signed = Protobuf::decode_signed(signed_vc_protobuf)
+        .map_err(|e| JsError::new(&format!("Protobuf decoding failed: {e}")))?;
+    Ok(to_js_value(&signed)?)
+}
+
 #[wasm_bindgen]
 pub fn sign_protobuf_vc(
     unsigned_vc_protobuf: &[u8],
@@ -219,6 +265,38 @@ pub fn verify_protobuf_vc(signed_vc_protobuf: &[u8], public_key: &[u8]) -> Resul
 }
 
 // cbor encoding/decoding functions --------------------------------------------------------
+
+/// Encode an unsigned credential (JS object) to CBOR bytes.
+#[wasm_bindgen]
+pub fn encode_unsigned_vc_to_cbor(unsigned_vc: JsValue) -> Result<Vec<u8>, JsError> {
+    let unsigned = unsigned_vc_from_js(&unsigned_vc)?;
+    crate::bindings::cbor::encode_unsigned_vc_to_cbor(&unsigned)
+        .map_err(|e| JsError::new(&format!("CBOR encoding failed: {e}")))
+}
+
+/// Encode a signed credential (JS object) to CBOR bytes.
+#[wasm_bindgen]
+pub fn encode_signed_vc_to_cbor(signed_vc: JsValue) -> Result<Vec<u8>, JsError> {
+    let signed = signed_vc_from_js(&signed_vc)?;
+    crate::bindings::cbor::encode_signed_vc_to_cbor(&signed)
+        .map_err(|e| JsError::new(&format!("CBOR encoding failed: {e}")))
+}
+
+/// Decode CBOR bytes into an unsigned credential (JS object).
+#[wasm_bindgen]
+pub fn decode_unsigned_vc_from_cbor(unsigned_vc_cbor: &[u8]) -> Result<JsValue, JsError> {
+    let unsigned = Cbor::decode_unsigned(unsigned_vc_cbor)
+        .map_err(|e| JsError::new(&format!("CBOR decoding failed: {e}")))?;
+    Ok(to_js_value(&unsigned)?)
+}
+
+/// Decode CBOR bytes into a signed credential (JS object).
+#[wasm_bindgen]
+pub fn decode_signed_vc_from_cbor(signed_vc_cbor: &[u8]) -> Result<JsValue, JsError> {
+    let signed = Cbor::decode_signed(signed_vc_cbor)
+        .map_err(|e| JsError::new(&format!("CBOR decoding failed: {e}")))?;
+    Ok(to_js_value(&signed)?)
+}
 
 #[wasm_bindgen]
 pub fn sign_cbor_vc(unsigned_vc_cbor: &[u8], private_key: &[u8]) -> Result<Vec<u8>, JsError> {

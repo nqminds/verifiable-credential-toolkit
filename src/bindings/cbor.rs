@@ -33,6 +33,13 @@ pub fn decode_signed_vc_from_cbor(bytes: &[u8]) -> Result<VerifiableCredential, 
     from_slice(bytes)
 }
 
+/// Encode an unsigned VC Rust struct into cbor bytes.
+pub fn encode_unsigned_vc_to_cbor(
+    vc: &UnsignedVerifiableCredential,
+) -> Result<Vec<u8>, c2pa_cbor::Error> {
+    to_vec(&vc)
+}
+
 /// Encode the existing signed VC Rust struct into cbor bytes.
 pub fn encode_signed_vc_to_cbor(vc: &VerifiableCredential) -> Result<Vec<u8>, c2pa_cbor::Error> {
     to_vec(&vc)
