@@ -430,6 +430,17 @@ impl UnsignedVerifiableCredential {
         validate_subject(&self.credential_subject, schema)
     }
 
+    /// The exact bytes that are signed and verified: the credential serialized with
+    /// JCS canonicalization (RFC 8785), as required by the VC Data Integrity JSON
+    /// cryptosuite. Canonicalizing makes the signed representation deterministic and
+    /// independent of map iteration order or JSON-library quirks, so a signature
+    /// survives a serialize/deserialize round-trip and is portable across
+    /// implementations. Without it, the unordered `additional_properties` maps on
+    /// `issuer`/`holder` objects would serialize inconsistently and break verification.
+    fn signing_payload(&self) -> Result<Vec<u8>, VcError> {
+        Ok(serde_jcs::to_vec(self)?)
+    }
+
     /// Sign the Verifiable Credential with an Ed25519 [SigningKey], producing a
     /// [VerifiableCredential] with a default proof and a computed `proofValue`.
     ///
@@ -437,8 +448,8 @@ impl UnsignedVerifiableCredential {
     /// [validate](UnsignedVerifiableCredential::validate) first if you need it.
     pub fn sign(self, signing_key: &SigningKey) -> Result<VerifiableCredential, VcError> {
         let dalek_key = DalekSigningKey::from_bytes(&signing_key.0);
-        let message = serde_json::to_string(&self)?;
-        let signature = dalek_key.sign(message.as_bytes());
+        let message = self.signing_payload()?;
+        let signature = dalek_key.sign(&message);
         let proof = Proof::new_ed25519(BASE64_STANDARD.encode(signature.to_bytes()));
 
         Ok(VerifiableCredential {
@@ -478,14 +489,14 @@ impl VerifiableCredential {
             }
         }
 
-        let message = serde_json::to_string(&self.unsigned)?;
+        let message = self.unsigned.signing_payload()?;
         let proof_bytes = BASE64_STANDARD.decode(&self.proof.proof_value)?;
         let signature = Signature::from_slice(&proof_bytes).map_err(VcError::MalformedSignature)?;
         let dalek_key =
             DalekVerifyingKey::from_bytes(&verifying_key.0).map_err(VcError::InvalidPublicKey)?;
 
         dalek_key
-            .verify(message.as_bytes(), &signature)
+            .verify(&message, &signature)
             .map_err(VcError::SignatureVerificationFailed)?;
         Ok(())
     }
