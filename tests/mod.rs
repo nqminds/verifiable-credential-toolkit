@@ -446,6 +446,79 @@ mod tests {
         assert!(verify_result.is_ok());
     }
 
+    /// Boundary: `validFrom` exactly "now" at construction is valid — verification runs a
+    /// moment later, so `now >= validFrom` holds. The lower bound is inclusive, not
+    /// strictly-after (guards the `<` vs `<=` choice in verify()).
+    #[test]
+    fn valid_from_at_now_is_valid() {
+        let signed = UnsignedVerifiableCredential::builder(
+            vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
+            vec!["VerifiableCredential".to_string()],
+            Issuer::Url(Url::parse("https://example.com/issuer").unwrap()),
+            serde_json::json!({ "id": "did:example:subject" }),
+        )
+        .valid_from(Utc::now())
+        .build()
+        .sign(&signing_key())
+        .expect("Failed to sign VC");
+
+        assert!(signed.verify(&verifying_key()).is_ok());
+    }
+
+    /// Boundary: `validUntil` one second in the past is expired.
+    #[test]
+    fn valid_until_just_past_is_expired() {
+        let signed = UnsignedVerifiableCredential::builder(
+            vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
+            vec!["VerifiableCredential".to_string()],
+            Issuer::Url(Url::parse("https://example.com/issuer").unwrap()),
+            serde_json::json!({ "id": "did:example:subject" }),
+        )
+        .valid_until(Utc::now() - Duration::seconds(1))
+        .build()
+        .sign(&signing_key())
+        .expect("Failed to sign VC");
+
+        assert!(matches!(
+            signed.verify(&verifying_key()),
+            Err(VcError::Expired)
+        ));
+    }
+
+    /// Boundary: with both bounds set and "now" strictly inside the window, the
+    /// credential verifies (neither NotYetValid nor Expired triggers).
+    #[test]
+    fn valid_window_currently_inside_is_valid() {
+        let signed = UnsignedVerifiableCredential::builder(
+            vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
+            vec!["VerifiableCredential".to_string()],
+            Issuer::Url(Url::parse("https://example.com/issuer").unwrap()),
+            serde_json::json!({ "id": "did:example:subject" }),
+        )
+        .valid_from(Utc::now() - Duration::hours(1))
+        .valid_until(Utc::now() + Duration::hours(1))
+        .build()
+        .sign(&signing_key())
+        .expect("Failed to sign VC");
+
+        assert!(signed.verify(&verifying_key()).is_ok());
+    }
+
+    /// A `SchemaSource::Url` that cannot be fetched surfaces as `VcError::SchemaFetch`.
+    /// Port 1 is reliably closed, so the connection fails without needing the network.
+    #[test]
+    fn schema_url_fetch_failure_is_schema_fetch_error() {
+        let vc: UnsignedVerifiableCredential = serde_json::from_str(include_str!(
+            "test_data/verifiable_credentials/unsigned.json"
+        ))
+        .expect("Failed to deserialize JSON");
+
+        assert!(matches!(
+            vc.validate(&SchemaSource::Url("http://127.0.0.1:1/schema.json")),
+            Err(VcError::SchemaFetch(_))
+        ));
+    }
+
     #[test]
     fn validate_with_schema_check_true_positive() {
         let private_key = signing_key();

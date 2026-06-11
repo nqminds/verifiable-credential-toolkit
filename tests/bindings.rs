@@ -5,7 +5,7 @@ use verifiable_credential_toolkit::{
     bindings::{
         cbor::{
             decode_signed_vc_from_cbor, decode_unsigned_vc_from_cbor, encode_signed_vc_to_cbor,
-            sign_cbor_vc, verify_cbor_vc,
+            sign_cbor_vc, verify_cbor_vc, Cbor,
         },
         protobuf::{
             decode_signed_vc_from_protobuf, decode_unsigned_vc_from_protobuf,
@@ -14,7 +14,7 @@ use verifiable_credential_toolkit::{
         },
         CredentialCodec,
     },
-    SigningKey, UnsignedVerifiableCredential, VerifiableCredential, VerifyingKey,
+    SigningKey, UnsignedVerifiableCredential, VcError, VerifiableCredential, VerifyingKey,
 };
 
 fn load_private_key() -> SigningKey {
@@ -165,6 +165,23 @@ fn protobuf_decode_rejects_invalid_bytes() {
 
     assert!(decode_unsigned_vc_from_protobuf(&invalid).is_err());
     assert!(decode_signed_vc_from_protobuf(&invalid).is_err());
+}
+
+/// A codec-level decode failure surfaces through the `CredentialCodec` trait as
+/// `VcError::Codec` (the variant that wraps a format-specific error), for both formats.
+#[test]
+fn codec_decode_failure_maps_to_vcerror_codec() {
+    let truncated_protobuf = [0x0A]; // length-delimited field header with no payload
+    assert!(matches!(
+        Protobuf::decode_unsigned(&truncated_protobuf),
+        Err(VcError::Codec(_))
+    ));
+
+    let invalid_cbor = [0xff];
+    assert!(matches!(
+        Cbor::decode_unsigned(&invalid_cbor),
+        Err(VcError::Codec(_))
+    ));
 }
 
 #[test]
