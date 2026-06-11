@@ -8,17 +8,32 @@ use protobuf::Message;
 use protobuf_json_mapping::{
     parse_from_str as json_to_protobuf, print_to_string as protobuf_to_json,
 };
+use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
 
 pub type ProtoResult<T> = Result<T, Box<dyn std::error::Error>>;
+
+/// `json_name` of every field whose JSON shape is open (arbitrary objects or
+/// string-or-object polymorphism). On the wire these are typed `string` fields holding
+/// the field's exact JSON text. They cannot be `google.protobuf.Value`: that type's only
+/// numeric kind is an IEEE-754 double, so it turns every integer into a float and rounds
+/// integers beyond 2^53. Carrying the JSON text instead makes the round-trip lossless.
+const DYNAMIC_JSON_FIELDS: &[&str] = &[
+    "name",
+    "description",
+    "issuer",
+    "credentialSubject",
+    "holder",
+];
 
 /// The Protobuf serialization format.
 ///
 /// The wire schema (`vc.proto`) is typed, but the bridge between Rust and protobuf
 /// still goes through the protobuf<->JSON canonical mapping: protobuf cannot natively
 /// represent the dynamic-object fields (`credentialSubject`, polymorphic `issuer`,
-/// etc.), and routing through JSON lets serde and the mapping agree on those.
+/// etc.), so those are carried as their exact JSON text in `string` fields, stringified
+/// on encode and parsed back on decode. Everything then round-trips losslessly.
 pub struct Protobuf;
 
 /// Wrap a format-specific error in [VcError::Codec].
@@ -28,21 +43,30 @@ fn codec_err<E: std::error::Error + Send + Sync + 'static>(e: E) -> VcError {
 
 impl CredentialCodec for Protobuf {
     fn decode_unsigned(bytes: &[u8]) -> Result<UnsignedVerifiableCredential, VcError> {
-        let protobuf =
-            ProtobufUnsignedVerifiableCredential::parse_from_bytes(bytes).map_err(codec_err)?;
-        let json = protobuf_to_json(&protobuf).map_err(codec_err)?;
-        Ok(serde_json::from_str(&json)?)
+        decode_from_protobuf::<ProtobufUnsignedVerifiableCredential, _>(bytes)
     }
 
     fn decode_signed(bytes: &[u8]) -> Result<VerifiableCredential, VcError> {
-        let protobuf = ProtobufVerifiableCredential::parse_from_bytes(bytes).map_err(codec_err)?;
-        let json = protobuf_to_json(&protobuf).map_err(codec_err)?;
-        Ok(serde_json::from_str(&json)?)
+        decode_from_protobuf::<ProtobufVerifiableCredential, _>(bytes)
     }
 
     fn encode_signed(vc: &VerifiableCredential) -> Result<Vec<u8>, VcError> {
         encode_to_protobuf::<_, ProtobufVerifiableCredential>(vc)
     }
+}
+
+/// Decode protobuf bytes of message `M` into the Rust domain type `T`, routing through
+/// the protobuf<->JSON mapping and parsing the dynamic JSON-text fields back into values.
+fn decode_from_protobuf<M, T>(bytes: &[u8]) -> Result<T, VcError>
+where
+    M: protobuf::MessageFull,
+    T: DeserializeOwned,
+{
+    let protobuf = M::parse_from_bytes(bytes).map_err(codec_err)?;
+    let json = protobuf_to_json(&protobuf).map_err(codec_err)?;
+    let mut value: Value = serde_json::from_str(&json)?;
+    denormalize_from_protobuf(&mut value);
+    Ok(serde_json::from_value(value)?)
 }
 
 /// Wrap a bare value in a single-element array, leaving existing arrays untouched.
@@ -90,6 +114,35 @@ fn normalize_for_protobuf(value: &mut Value) {
     if let Some(proof) = obj.get_mut("proof").and_then(Value::as_object_mut) {
         coerce_to_array(proof.get_mut("domain"));
         coerce_to_array(proof.get_mut("nonce"));
+    }
+
+    // Dynamic JSON fields are carried on the wire as their exact JSON text, so the
+    // typed `string` field is lossless where `google.protobuf.Value` was not.
+    for field in DYNAMIC_JSON_FIELDS {
+        if let Some(v) = obj.get_mut(*field) {
+            if !v.is_null() {
+                let text = serde_json::to_string(v).expect("serde_json::Value re-serializes");
+                *v = Value::String(text);
+            }
+        }
+    }
+}
+
+/// Inverse of the dynamic-field stringification in [normalize_for_protobuf]: parse each
+/// JSON-text `string` field back into the JSON value it encodes, after decoding.
+fn denormalize_from_protobuf(value: &mut Value) {
+    let Some(obj) = value.as_object_mut() else {
+        return;
+    };
+
+    for field in DYNAMIC_JSON_FIELDS {
+        let parsed = match obj.get(*field) {
+            Some(Value::String(text)) => serde_json::from_str::<Value>(text).ok(),
+            _ => None,
+        };
+        if let Some(parsed) = parsed {
+            obj.insert((*field).to_string(), parsed);
+        }
     }
 }
 
