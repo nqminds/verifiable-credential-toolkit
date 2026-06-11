@@ -267,14 +267,16 @@ pub struct Proof {
 }
 
 impl Proof {
-    /// Construct a default Ed25519 proof carrying the given base64-encoded `proofValue`.
-    fn new_ed25519(proof_value: String) -> Self {
+    /// Construct a default EdDSA data-integrity proof carrying the given base64-encoded
+    /// `proofValue`. Uses the `eddsa-jcs-2022` cryptosuite, matching the JCS (RFC 8785)
+    /// canonicalization [signing](UnsignedVerifiableCredential::sign) applies.
+    fn new_eddsa_jcs_2022(proof_value: String) -> Self {
         Proof {
             id: None,
-            proof_type: "Ed25519Signature2018".to_string(),
+            proof_type: "DataIntegrityProof".to_string(),
             proof_purpose: "assertionMethod".to_string(),
             verification_method: None,
-            cryptosuite: None,
+            cryptosuite: Some("eddsa-jcs-2022".to_string()),
             created: None,
             expires: None,
             domain: None,
@@ -450,7 +452,7 @@ impl UnsignedVerifiableCredential {
         let dalek_key = DalekSigningKey::from_bytes(&signing_key.0);
         let message = self.signing_payload()?;
         let signature = dalek_key.sign(&message);
-        let proof = Proof::new_ed25519(BASE64_STANDARD.encode(signature.to_bytes()));
+        let proof = Proof::new_eddsa_jcs_2022(BASE64_STANDARD.encode(signature.to_bytes()));
 
         Ok(VerifiableCredential {
             unsigned: self,

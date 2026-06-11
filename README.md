@@ -223,7 +223,8 @@ A Verifiable Credential is a JSON object with this structure:
 
   // Added by signing — the cryptographic proof
   "proof": {
-    "type": "Ed25519Signature2018",
+    "type": "DataIntegrityProof",
+    "cryptosuite": "eddsa-jcs-2022",
     "proofPurpose": "assertionMethod",
     "proofValue": "base64-encoded-signature...",
   },
