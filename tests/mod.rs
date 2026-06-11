@@ -3,7 +3,7 @@ mod tests {
     use chrono::{DateTime, Duration, Utc};
     use url::Url;
     use verifiable_credential_toolkit::{
-        generate_keypair, Holder, Issuer, IssuerObject, SchemaSource, SigningKey,
+        generate_keypair, Holder, HolderObject, Issuer, IssuerObject, SchemaSource, SigningKey,
         UnsignedVerifiableCredential, VcError, VerifiableCredential, VerifiablePresentation,
         VerifyingKey,
     };
@@ -531,6 +531,54 @@ mod tests {
         ));
     }
 
+    /// A `proofValue` that isn't valid base64 fails at the decode step — a distinct error
+    /// from a well-formed-but-wrong signature.
+    #[test]
+    fn verify_rejects_non_base64_proof_value() {
+        let vc: VerifiableCredential = serde_json::from_value(serde_json::json!({
+            "@context": ["https://www.w3.org/ns/credentials/v2"],
+            "type": ["VerifiableCredential"],
+            "issuer": "https://example.com/",
+            "credentialSubject": { "id": "did:example:subject" },
+            "proof": {
+                "type": "DataIntegrityProof",
+                "cryptosuite": "eddsa-jcs-2022",
+                "proofPurpose": "assertionMethod",
+                "proofValue": "not valid base64 !!!"
+            }
+        }))
+        .expect("VC should deserialize");
+
+        assert!(matches!(
+            vc.verify(&verifying_key()),
+            Err(VcError::ProofDecode(_))
+        ));
+    }
+
+    /// A `proofValue` that decodes but isn't a 64-byte Ed25519 signature is rejected as
+    /// malformed, before any verification maths.
+    #[test]
+    fn verify_rejects_malformed_signature_length() {
+        let vc: VerifiableCredential = serde_json::from_value(serde_json::json!({
+            "@context": ["https://www.w3.org/ns/credentials/v2"],
+            "type": ["VerifiableCredential"],
+            "issuer": "https://example.com/",
+            "credentialSubject": { "id": "did:example:subject" },
+            "proof": {
+                "type": "DataIntegrityProof",
+                "cryptosuite": "eddsa-jcs-2022",
+                "proofPurpose": "assertionMethod",
+                "proofValue": "AAAA"
+            }
+        }))
+        .expect("VC should deserialize");
+
+        assert!(matches!(
+            vc.verify(&verifying_key()),
+            Err(VcError::MalformedSignature(_))
+        ));
+    }
+
     /// Regression: `Holder::Url` must serialize as a bare string (untagged), not
     /// `{"Url": "..."}`, and round-trip.
     #[test]
@@ -551,6 +599,33 @@ mod tests {
             "holder should be a bare string, got: {json}"
         );
         assert!(!json.contains(r#""Url""#), "holder should not be tagged");
+
+        let back: VerifiablePresentation = serde_json::from_str(&json).unwrap();
+        assert_eq!(vp, back);
+    }
+
+    /// `Holder::Object` + `#[serde(flatten)]` additional properties must serialize
+    /// alongside `id` and round-trip (mirrors the issuer-object case).
+    #[test]
+    fn holder_object_flatten_round_trips() {
+        use std::collections::HashMap;
+
+        let mut extra = HashMap::new();
+        extra.insert("name".to_string(), serde_json::json!("Acme Holder"));
+
+        let vp = VerifiablePresentation {
+            context: vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
+            id: None,
+            presentation_type: vec!["VerifiablePresentation".to_string()],
+            verifiable_credential: None,
+            holder: Some(Holder::Object(HolderObject {
+                id: Url::parse("https://example.com/holder").unwrap(),
+                additional_properties: Some(extra),
+            })),
+        };
+
+        let json = serde_json::to_string(&vp).unwrap();
+        assert!(json.contains(r#""name":"Acme Holder""#), "got: {json}");
 
         let back: VerifiablePresentation = serde_json::from_str(&json).unwrap();
         assert_eq!(vp, back);

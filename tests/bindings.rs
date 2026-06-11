@@ -356,6 +356,28 @@ fn protobuf_full_proof_fields_roundtrip() {
     assert_eq!(signed, decoded);
 }
 
+/// `credentialSubject` may be an array of subjects (spec-valid), not just an object.
+/// Both codecs must round-trip that shape losslessly.
+#[test]
+fn codecs_preserve_array_credential_subject() {
+    let vc: UnsignedVerifiableCredential = serde_json::from_value(serde_json::json!({
+        "@context": ["https://www.w3.org/ns/credentials/v2"],
+        "type": ["VerifiableCredential"],
+        "issuer": "https://www.example.com/",
+        "credentialSubject": [
+            { "id": "did:example:1", "n": 1 },
+            { "id": "did:example:2", "n": 9007199254740993i64 }
+        ]
+    }))
+    .expect("array-subject VC should parse");
+
+    let pb = encode_unsigned_vc_to_protobuf(&vc).expect("protobuf encode");
+    assert_eq!(Protobuf::decode_unsigned(&pb).expect("protobuf decode"), vc);
+
+    let cbor = to_vec(&vc).expect("cbor encode");
+    assert_eq!(decode_unsigned_vc_from_cbor(&cbor).expect("cbor decode"), vc);
+}
+
 /// A `null` nested inside `credentialSubject` survives the Protobuf round-trip — the
 /// dynamic field is stored as exact JSON text, so nested nulls are not stripped (only
 /// absent top-level optional fields are).
