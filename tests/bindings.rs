@@ -252,3 +252,194 @@ fn protobuf_and_cbor_agree_on_mixed_numbers() {
     assert_eq!(protobuf_roundtrip_subject_value(subject.clone()), subject);
     assert_eq!(cbor_roundtrip_subject_value(subject.clone()), subject);
 }
+
+// --- Full-credential and codec-branch coverage --------------------------------
+
+/// A maximally-populated unsigned credential: object-form `issuer`/`name`/`description`
+/// (with numbers inside them), a big integer and a nested `null` in `credentialSubject`,
+/// nanosecond timestamps, a `credentialStatus`, and a multi-element `credentialSchema`.
+/// Exercises every dynamic-JSON field and the optional typed fields at once.
+fn kitchen_sink_unsigned_json() -> serde_json::Value {
+    serde_json::json!({
+        "@context": [
+            "https://www.w3.org/ns/credentials/v2",
+            "https://www.w3.org/ns/credentials/examples/v2"
+        ],
+        "id": "urn:uuid:9a3e3c0e-2db0-412a-95c7-cf5520ba78df",
+        "type": ["VerifiableCredential", "ExampleCredential"],
+        "name": { "@value": "Example Credential", "@language": "en" },
+        "description": "A plain-string description",
+        "issuer": { "id": "https://example.com/issuer", "name": "Example Org", "rank": 7 },
+        "credentialSubject": {
+            "id": "did:example:subject",
+            "count": 42,
+            "big": 9007199254740993i64,
+            "ratio": 0.25,
+            "nested": { "flag": true, "missing": null, "list": [1, "two", 3.5] }
+        },
+        "validFrom": "2024-08-22T13:53:32.295644150Z",
+        "validUntil": "2030-01-01T00:00:00.000000001Z",
+        "credentialStatus": { "id": "https://example.com/status/1", "type": "StatusList2021Entry" },
+        "credentialSchema": [
+            { "id": "https://example.com/schema-a.json", "type": "JsonSchema" },
+            { "id": "https://example.com/schema-b.json", "type": "JsonSchema" }
+        ]
+    })
+}
+
+/// The fully-populated unsigned credential round-trips through Protobuf with no loss:
+/// object-form polymorphic fields, numbers inside them, nested nulls, nanosecond
+/// timestamps, status, and multi-element schema all come back identical.
+#[test]
+fn protobuf_full_unsigned_credential_roundtrip() {
+    let vc: UnsignedVerifiableCredential =
+        serde_json::from_value(kitchen_sink_unsigned_json()).expect("kitchen-sink should parse");
+
+    let bytes = encode_unsigned_vc_to_protobuf(&vc).expect("encode failed");
+    let decoded = Protobuf::decode_unsigned(&bytes).expect("decode failed");
+
+    assert_eq!(vc, decoded);
+}
+
+/// The same rich credential signs and verifies through Protobuf, and the decoded
+/// unsigned payload still equals the original — proving the lossless round-trip holds
+/// under signature verification (the signature is over the JSON, which must reproduce
+/// byte-for-byte).
+#[test]
+fn protobuf_full_credential_signs_and_verifies() {
+    let private_key = load_private_key();
+    let public_key = load_public_key();
+
+    let vc: UnsignedVerifiableCredential =
+        serde_json::from_value(kitchen_sink_unsigned_json()).expect("kitchen-sink should parse");
+    let unsigned_bytes = encode_unsigned_vc_to_protobuf(&vc).expect("encode failed");
+
+    let signed_bytes =
+        sign_protobuf_vc(&unsigned_bytes, &private_key).expect("signing failed");
+    verify_protobuf_vc(&signed_bytes, &public_key).expect("verification failed");
+
+    let decoded = Protobuf::decode_signed(&signed_bytes).expect("decode failed");
+    assert_eq!(decoded.unsigned, vc);
+}
+
+/// Every optional `Proof` field round-trips, including the `domain`/`nonce` `OneOrMany`
+/// coercion (single `domain` -> array, multi-element `nonce` left as-is). This is a
+/// structural round-trip on a fabricated proof — it asserts encode/decode equality, not
+/// signature validity, since those coercion branches are never reached by `sign()`.
+#[test]
+fn protobuf_full_proof_fields_roundtrip() {
+    let signed: VerifiableCredential = serde_json::from_value(serde_json::json!({
+        "@context": ["https://www.w3.org/ns/credentials/v2"],
+        "type": ["VerifiableCredential"],
+        "issuer": "https://www.example.com/",
+        "credentialSubject": { "id": "subject-id" },
+        "proof": {
+            "id": "urn:uuid:proof-1",
+            "type": "DataIntegrityProof",
+            "proofPurpose": "assertionMethod",
+            "verificationMethod": "did:example:issuer#key-1",
+            "cryptosuite": "eddsa-2022",
+            "created": "2024-08-22T13:53:32.295644150Z",
+            "expires": "2030-01-01T00:00:00.000000001Z",
+            "domain": "https://example.com",
+            "challenge": "abc123",
+            "proofValue": "z2DeadBeefSignatureValueForStructuralRoundTripOnly",
+            "previousProof": "urn:uuid:prev-proof",
+            "nonce": ["nonce-1", "nonce-2"]
+        }
+    }))
+    .expect("fabricated signed VC should parse");
+
+    let bytes = encode_signed_vc_to_protobuf(&signed).expect("encode failed");
+    let decoded = Protobuf::decode_signed(&bytes).expect("decode failed");
+
+    assert_eq!(signed, decoded);
+}
+
+/// A `null` nested inside `credentialSubject` survives the Protobuf round-trip — the
+/// dynamic field is stored as exact JSON text, so nested nulls are not stripped (only
+/// absent top-level optional fields are).
+#[test]
+fn protobuf_preserves_nested_null_in_subject() {
+    let subject = serde_json::json!({ "id": "x", "maybe": null, "deep": { "also": null } });
+    assert_eq!(protobuf_roundtrip_subject_value(subject.clone()), subject);
+}
+
+/// A single-element `credentialStatus.type` is coerced to an array for the `repeated`
+/// protobuf field and comes back as the original single-element vec.
+#[test]
+fn protobuf_credential_status_roundtrips() {
+    let vc: UnsignedVerifiableCredential = serde_json::from_value(serde_json::json!({
+        "@context": ["https://www.w3.org/ns/credentials/v2"],
+        "type": ["VerifiableCredential"],
+        "issuer": "https://www.example.com/",
+        "credentialSubject": { "id": "subject-id" },
+        "credentialStatus": { "id": "https://example.com/status/1", "type": "StatusList2021Entry" }
+    }))
+    .expect("VC with status should parse");
+
+    let bytes = encode_unsigned_vc_to_protobuf(&vc).expect("encode failed");
+    let decoded = Protobuf::decode_unsigned(&bytes).expect("decode failed");
+
+    assert_eq!(vc, decoded);
+}
+
+/// The signature is computed over the credential's JSON, so it is independent of the
+/// transport codec: a credential signed once verifies after being re-encoded through
+/// either CBOR or Protobuf, and the decoded credential is identical in both.
+#[test]
+fn signature_is_independent_of_codec() {
+    let private_key = load_private_key();
+    let public_key = load_public_key();
+
+    let unsigned: UnsignedVerifiableCredential =
+        serde_json::from_value(kitchen_sink_unsigned_json()).expect("kitchen-sink should parse");
+    let signed = unsigned.sign(&private_key).expect("signing failed");
+
+    // Protobuf transport.
+    let pb = encode_signed_vc_to_protobuf(&signed).expect("protobuf encode failed");
+    verify_protobuf_vc(&pb, &public_key).expect("protobuf verification failed");
+    assert_eq!(Protobuf::decode_signed(&pb).expect("protobuf decode"), signed);
+
+    // CBOR transport.
+    let cbor = encode_signed_vc_to_cbor(&signed).expect("cbor encode failed");
+    verify_cbor_vc(&cbor, &public_key).expect("cbor verification failed");
+    assert_eq!(decode_signed_vc_from_cbor(&cbor).expect("cbor decode"), signed);
+}
+
+/// Regression: an object-form `issuer` carrying several extra properties must sign and
+/// verify reliably after a round-trip. Those properties live in a `HashMap`, whose
+/// iteration order is randomized per instance; before signing was JCS-canonicalized
+/// (RFC 8785), the re-serialized credential's bytes differed from what was signed and
+/// verification failed non-deterministically (measured 20/20 failures). Canonicalization
+/// sorts keys, so the signed bytes are stable. Repeated to defeat the previous ~1-in-n!
+/// chance of an accidental order match.
+#[test]
+fn signing_is_stable_for_object_issuer_with_extra_properties() {
+    let private_key = load_private_key();
+    let public_key = load_public_key();
+
+    for _ in 0..25 {
+        let unsigned: UnsignedVerifiableCredential = serde_json::from_value(serde_json::json!({
+            "@context": ["https://www.w3.org/ns/credentials/v2"],
+            "type": ["VerifiableCredential"],
+            "issuer": {
+                "id": "https://example.com/issuer",
+                "name": "Example Org",
+                "region": "EU",
+                "tier": "gold",
+                "rank": 7
+            },
+            "credentialSubject": { "id": "subject-id" }
+        }))
+        .expect("object-issuer VC should parse");
+
+        let signed = unsigned.sign(&private_key).expect("signing failed");
+
+        let pb = encode_signed_vc_to_protobuf(&signed).expect("protobuf encode failed");
+        verify_protobuf_vc(&pb, &public_key).expect("protobuf verification after round-trip");
+
+        let cbor = encode_signed_vc_to_cbor(&signed).expect("cbor encode failed");
+        verify_cbor_vc(&cbor, &public_key).expect("cbor verification after round-trip");
+    }
+}
