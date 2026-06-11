@@ -63,21 +63,6 @@ message VerifiableCredential {
   Proof proof = 12 [json_name = "proof"];
 }
 
-/// Mirrors Rust VerifiablePresentation JSON shape.
-message VerifiablePresentation {
-  repeated string context = 1 [json_name = "@context"];
-  optional string id = 2 [json_name = "id"];
-
-  // OneOrMany<String> in Rust
-  repeated string type = 3 [json_name = "type"];
-
-  // OneOrMany<VerifiableCredential> in Rust
-  repeated VerifiableCredential verifiable_credential = 4 [json_name = "verifiableCredential"];
-
-  // Holder in Rust (string | object), stored as its exact JSON text.
-  string holder = 5 [json_name = "holder"];
-}
-
 /// Mirrors Rust Status.
 message Status {
   optional string id = 1 [json_name = "id"];
