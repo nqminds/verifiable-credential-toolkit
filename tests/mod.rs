@@ -34,6 +34,20 @@ mod tests {
         assert!(serde_json::to_string(&vc).is_ok());
     }
 
+    /// The committed `vc.json` fixture carries a real signature over the test key. Verify
+    /// it against the stored `proofValue` (not a freshly-signed one), so that any change
+    /// to the canonicalization or proof format that would invalidate existing credentials
+    /// is caught here rather than passing silently.
+    #[test]
+    fn vc_json_fixture_signature_verifies() {
+        let vc: VerifiableCredential =
+            serde_json::from_str(include_str!("test_data/verifiable_credentials/vc.json"))
+                .expect("Failed to deserialize JSON");
+
+        vc.verify(&verifying_key())
+            .expect("stored vc.json signature should verify");
+    }
+
     /// Test that an invalid Verifiable Credential fails to deserialize
     #[test]
     fn invalid_vc_fails_to_deserialize() {
