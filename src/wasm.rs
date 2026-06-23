@@ -176,6 +176,36 @@ pub fn verify_with_schema_check(
     }
 }
 
+/// Sign an unsigned credential (JS object) with a PKCS#8 PEM private key of any
+/// supported algorithm (Ed25519, ECDSA P-256, ECDSA P-384). The proof's cryptosuite is
+/// selected from the key's algorithm.
+#[wasm_bindgen]
+pub fn sign_with_pem(unsigned_vc: JsValue, private_key_pem: &str) -> Result<JsValue, JsError> {
+    let unsigned = unsigned_vc_from_js(&unsigned_vc)?;
+    let signing_key = SigningKey::from_pkcs8_pem(private_key_pem)
+        .map_err(|e| JsError::new(&format!("Invalid private key PEM: {e}")))?;
+    let signed = unsigned
+        .sign(&signing_key)
+        .map_err(|e| JsError::new(&format!("Signing failed: {e}")))?;
+    Ok(to_js_value(&signed)?)
+}
+
+/// Verify a signed credential (JS object) against a SubjectPublicKeyInfo PEM public key
+/// of any supported algorithm — the `publicKeyPem` form from DID documents. Returns
+/// false on any failure (bad key, wrong algorithm, invalid signature).
+#[wasm_bindgen]
+pub fn verify_with_pem(signed_vc: JsValue, public_key_pem: &str) -> Result<bool, JsError> {
+    let vc: VerifiableCredential = from_value(signed_vc).map_err(|e| {
+        JsError::new(&format!(
+            "Failed to deserialize signed verifiable credential: {e}"
+        ))
+    })?;
+    let Ok(verifying_key) = VerifyingKey::from_pem(public_key_pem) else {
+        return Ok(false);
+    };
+    Ok(vc.verify(&verifying_key).is_ok())
+}
+
 #[wasm_bindgen]
 pub struct KeyPair {
     signing_key: Vec<u8>,

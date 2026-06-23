@@ -1,6 +1,6 @@
 # Verifiable Credential Toolkit
 
-A Rust library (with WASM/JavaScript bindings) for creating, signing, and verifying [W3C Verifiable Credentials](https://www.w3.org/TR/vc-data-model-2.0/). It uses Ed25519 digital signatures to ensure credentials are tamper-proof and can be independently verified.
+A Rust library (with WASM/JavaScript bindings) for creating, signing, and verifying [W3C Verifiable Credentials](https://www.w3.org/TR/vc-data-model-2.0/). It supports Ed25519 and ECDSA (NIST P-256 / P-384) digital signatures to ensure credentials are tamper-proof and can be independently verified, with keys loadable from PEM.
 
 ## Table of Contents
 
@@ -231,20 +231,29 @@ A Verifiable Credential is a JSON object with this structure:
 }
 ```
 
-### Ed25519 Keys
+### Algorithms & keys
 
-This toolkit uses **Ed25519**, a fast and widely-supported digital signature algorithm. Keys are compact (32 bytes each) and signatures are 64 bytes.
+The toolkit supports three signature algorithms, each mapped to a W3C Data Integrity cryptosuite:
 
-- **Private key** (signing key): 32 bytes. Keep this secret. Used by the issuer to sign credentials.
-- **Public key** (verifying key): 32 bytes. Share this freely. Used by anyone to verify a credential's authenticity.
+| Algorithm | `Algorithm` variant | Cryptosuite | Public key |
+|---|---|---|---|
+| Ed25519 (EdDSA) | `Ed25519` | `eddsa-jcs-2022` | 32 bytes |
+| ECDSA NIST P-256 (ES256) | `P256` | `ecdsa-jcs-2019` | SEC1 point (65 bytes uncompressed) |
+| ECDSA NIST P-384 (ES384) | `P384` | `ecdsa-jcs-2019` | SEC1 point (97 bytes uncompressed) |
 
-Keys are stored as raw binary files (not PEM/DER). The CLI tools generate files named `{timestamp}.priv` and `{timestamp}.pub`.
+Keys can be supplied as:
+
+- **PEM** — `VerifyingKey::from_pem` parses a SubjectPublicKeyInfo (`-----BEGIN PUBLIC KEY-----`, the `publicKeyPem` form from DID documents), dispatching on the algorithm/curve OID; `SigningKey::from_pkcs8_pem` parses a PKCS#8 private key. This is the recommended path for multi-issuer interop.
+- **Raw bytes** — `SigningKey::from_bytes` / `VerifyingKey::from_bytes` take a 32-byte **Ed25519** key (the CLI tools store these as `{timestamp}.priv` / `.pub` raw binary files).
+- **Generated** — `generate_keypair()` (Ed25519) or `generate_keypair_for(Algorithm)`.
+
+`verify()` selects the verification algorithm from the key and checks it against the proof's `cryptosuite`; a credential whose cryptosuite the toolkit doesn't implement is rejected with `VcError::UnsupportedCryptosuite` rather than silently mis-verified.
 
 ### Canonical signing
 
-The signature is computed over the credential serialized with **JCS (JSON Canonicalization Scheme, [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785))**, as used by the `eddsa-jcs-2022` cryptosuite. Canonicalization sorts object keys and normalizes number formatting, so the signed bytes are independent of field ordering. This means a signature stays valid across a serialize/deserialize round-trip and across encodings (JSON, CBOR, Protobuf) — the proof is over the credential's canonical form, not the wire bytes. The emitted proof is a `DataIntegrityProof` with `cryptosuite: "eddsa-jcs-2022"`.
+The signature is computed over the credential serialized with **JCS (JSON Canonicalization Scheme, [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785))**, used by both the `eddsa-jcs-2022` and `ecdsa-jcs-2019` cryptosuites. Canonicalization sorts object keys and normalizes number formatting, so the signed bytes are independent of field ordering. This means a signature stays valid across a serialize/deserialize round-trip and across encodings (JSON, CBOR, Protobuf) — the proof is over the credential's canonical form, not the wire bytes. The emitted proof is a `DataIntegrityProof` whose `cryptosuite` matches the signing key, with the signature in a multibase (base58btc) `proofValue`.
 
-> **Compatibility note:** signatures are not interchangeable with pre-0.6 releases, which signed over non-canonical JSON. Credentials issued by 0.5.x must be re-signed.
+> **Compatibility note:** signatures are not interchangeable across major changes. 0.5.x signed over non-canonical JSON; 0.6.x used a plain-base64 `proofValue`; 0.7.x uses a multibase `proofValue`. Credentials issued by earlier versions must be re-signed.
 
 ---
 

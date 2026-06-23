@@ -89,6 +89,25 @@ export function verify_with_schema_check(
   schema: any
 ): boolean;
 
+/**
+ * Sign with a PKCS#8 PEM private key of any supported algorithm (Ed25519, ECDSA
+ * P-256, ECDSA P-384). The proof's `cryptosuite` is chosen from the key's algorithm
+ * (`eddsa-jcs-2022` or `ecdsa-jcs-2019`).
+ */
+export function sign_with_pem(
+  unsigned_vc: UnsignedVerifiableCredential,
+  private_key_pem: string
+): VerifiableCredential;
+
+/**
+ * Verify against a SubjectPublicKeyInfo PEM public key (the `publicKeyPem` form from
+ * DID documents) of any supported algorithm. Returns false on any failure.
+ */
+export function verify_with_pem(
+  signed_vc: VerifiableCredential,
+  public_key_pem: string
+): boolean;
+
 // CBOR bindings: encode/decode credentials to and from CBOR bytes, and sign/verify
 // CBOR-encoded credential bytes.
 export function encode_unsigned_vc_to_cbor(
