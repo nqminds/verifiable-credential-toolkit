@@ -3,9 +3,9 @@ mod tests {
     use chrono::{DateTime, Duration, Utc};
     use url::Url;
     use verifiable_credential_toolkit::{
-        generate_keypair, Holder, HolderObject, Issuer, IssuerObject, SchemaSource, SigningKey,
-        UnsignedVerifiableCredential, VcError, VerifiableCredential, VerifiablePresentation,
-        VerifyingKey,
+        generate_keypair, generate_keypair_for, Algorithm, Holder, HolderObject, Issuer,
+        IssuerObject, SchemaSource, SigningKey, UnsignedVerifiableCredential, VcError,
+        VerifiableCredential, VerifiablePresentation, VerifyingKey,
     };
 
     /// Load the test signing key from disk.
@@ -580,9 +580,10 @@ mod tests {
             VerifyingKey::from_bytes(&[0u8; 31]),
             Err(VcError::InvalidPublicKeyLength)
         ));
-        // Exactly 32 bytes is accepted.
-        assert!(SigningKey::from_bytes(&[7u8; 32]).is_ok());
-        assert!(VerifyingKey::from_bytes(&[7u8; 32]).is_ok());
+        // Exactly 32 bytes of a real Ed25519 key is accepted.
+        let kp = generate_keypair();
+        assert!(SigningKey::from_bytes(&kp.signing_key.to_bytes()).is_ok());
+        assert!(VerifyingKey::from_bytes(&kp.verifying_key.to_bytes()).is_ok());
     }
 
     /// A well-formed signature verified against a different (valid) public key
@@ -628,8 +629,9 @@ mod tests {
         ));
     }
 
-    /// A `proofValue` that decodes but isn't a 64-byte Ed25519 signature is rejected as
-    /// malformed, before any verification maths.
+    /// A `proofValue` that decodes (valid multibase) but isn't a 64-byte Ed25519
+    /// signature is rejected as malformed, before any verification maths. `z` is the
+    /// base58btc multibase prefix; "1111111111" decodes to ten zero bytes.
     #[test]
     fn verify_rejects_malformed_signature_length() {
         let vc: VerifiableCredential = serde_json::from_value(serde_json::json!({
@@ -641,7 +643,7 @@ mod tests {
                 "type": "DataIntegrityProof",
                 "cryptosuite": "eddsa-jcs-2022",
                 "proofPurpose": "assertionMethod",
-                "proofValue": "AAAA"
+                "proofValue": "z1111111111"
             }
         }))
         .expect("VC should deserialize");
@@ -663,8 +665,10 @@ mod tests {
             "issuer": "https://example.com/",
             "credentialSubject": { "id": "did:example:subject" },
             "proof": {
+                // RDF-canonicalization suite — a real W3C suite we deliberately don't
+                // implement (we only do the JCS cryptosuites).
                 "type": "DataIntegrityProof",
-                "cryptosuite": "ecdsa-jcs-2019",
+                "cryptosuite": "ecdsa-rdfc-2019",
                 "proofPurpose": "assertionMethod",
                 "proofValue": "z2DeadBeefNotEvenCheckedBecauseTheSuiteIsRejectedFirst"
             }
@@ -673,8 +677,86 @@ mod tests {
 
         assert!(matches!(
             vc.verify(&verifying_key()),
-            Err(VcError::UnsupportedCryptosuite(suite)) if suite == "ecdsa-jcs-2019"
+            Err(VcError::UnsupportedCryptosuite(suite)) if suite == "ecdsa-rdfc-2019"
         ));
+    }
+
+    fn sample_unsigned() -> UnsignedVerifiableCredential {
+        serde_json::from_value(serde_json::json!({
+            "@context": ["https://www.w3.org/ns/credentials/v2"],
+            "type": ["VerifiableCredential"],
+            "issuer": "https://example.com/issuer",
+            "credentialSubject": { "id": "did:example:subject", "n": 42 }
+        }))
+        .expect("sample VC should deserialize")
+    }
+
+    /// End-to-end PEM path: load a PKCS#8 private key PEM, sign, load the matching SPKI
+    /// public key PEM, and verify — for each supported algorithm. The keys are real
+    /// openssl-generated PEMs, exercising `from_pkcs8_pem` / `from_pem` dispatch.
+    fn pem_roundtrip(priv_pem: &str, pub_pem: &str, expected_cryptosuite: &str) {
+        let sk = SigningKey::from_pkcs8_pem(priv_pem).expect("parse private PEM");
+        let vk = VerifyingKey::from_pem(pub_pem).expect("parse public PEM");
+
+        let signed = sample_unsigned().sign(&sk).expect("sign");
+        assert_eq!(
+            serde_json::to_value(&signed).unwrap()["proof"]["cryptosuite"],
+            expected_cryptosuite
+        );
+        signed
+            .verify(&vk)
+            .expect("verify with PEM-loaded public key");
+    }
+
+    #[test]
+    fn ed25519_pem_sign_verify_roundtrip() {
+        pem_roundtrip(
+            include_str!("test_data/keys/pem/ed25519.priv.pem"),
+            include_str!("test_data/keys/pem/ed25519.pub.pem"),
+            "eddsa-jcs-2022",
+        );
+    }
+
+    #[test]
+    fn p256_pem_sign_verify_roundtrip() {
+        pem_roundtrip(
+            include_str!("test_data/keys/pem/p256.priv.pem"),
+            include_str!("test_data/keys/pem/p256.pub.pem"),
+            "ecdsa-jcs-2019",
+        );
+    }
+
+    #[test]
+    fn p384_pem_sign_verify_roundtrip() {
+        pem_roundtrip(
+            include_str!("test_data/keys/pem/p384.priv.pem"),
+            include_str!("test_data/keys/pem/p384.pub.pem"),
+            "ecdsa-jcs-2019",
+        );
+    }
+
+    /// A freshly generated key pair signs and verifies for every algorithm.
+    #[test]
+    fn generated_keypair_signs_and_verifies_each_algorithm() {
+        for alg in [Algorithm::Ed25519, Algorithm::P256, Algorithm::P384] {
+            let kp = generate_keypair_for(alg);
+            assert_eq!(kp.signing_key.algorithm(), alg);
+            let signed = sample_unsigned().sign(&kp.signing_key).expect("sign");
+            signed
+                .verify(&kp.verifying_key)
+                .unwrap_or_else(|e| panic!("verify failed for {alg:?}: {e}"));
+        }
+    }
+
+    /// A signature made with one algorithm does not verify against a key of another
+    /// algorithm (P-256 signature, P-384 key).
+    #[test]
+    fn cross_algorithm_verification_fails() {
+        let p256 = generate_keypair_for(Algorithm::P256);
+        let p384 = generate_keypair_for(Algorithm::P384);
+
+        let signed = sample_unsigned().sign(&p256.signing_key).expect("sign");
+        assert!(signed.verify(&p384.verifying_key).is_err());
     }
 
     /// Regression: `Holder::Url` must serialize as a bare string (untagged), not

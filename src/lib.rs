@@ -1,8 +1,8 @@
-use base64::{prelude::BASE64_STANDARD, Engine};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{
     Signature, Signer, SigningKey as DalekSigningKey, Verifier, VerifyingKey as DalekVerifyingKey,
 };
+use multibase::Base;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -266,21 +266,21 @@ pub struct Proof {
     pub nonce: Option<Vec<String>>,
 }
 
-/// The W3C Data Integrity cryptosuite this library signs with and can verify. As more
-/// suites are added (e.g. `ecdsa-jcs-2019`), this becomes the dispatch key in `verify()`.
+/// W3C Data Integrity cryptosuite identifiers this library signs with and can verify.
+/// Both canonicalize with JCS (RFC 8785); the curve/algorithm is determined by the key.
 pub(crate) const EDDSA_JCS_2022_CRYPTOSUITE: &str = "eddsa-jcs-2022";
+pub(crate) const ECDSA_JCS_2019_CRYPTOSUITE: &str = "ecdsa-jcs-2019";
 
 impl Proof {
-    /// Construct a default EdDSA data-integrity proof carrying the given base64-encoded
-    /// `proofValue`. Uses the `eddsa-jcs-2022` cryptosuite, matching the JCS (RFC 8785)
-    /// canonicalization [signing](UnsignedVerifiableCredential::sign) applies.
-    fn new_eddsa_jcs_2022(proof_value: String) -> Self {
+    /// Construct a default data-integrity proof for the given `cryptosuite`, carrying the
+    /// multibase-encoded `proof_value`.
+    fn new_data_integrity(cryptosuite: &str, proof_value: String) -> Self {
         Proof {
             id: None,
             proof_type: "DataIntegrityProof".to_string(),
             proof_purpose: "assertionMethod".to_string(),
             verification_method: None,
-            cryptosuite: Some(EDDSA_JCS_2022_CRYPTOSUITE.to_string()),
+            cryptosuite: Some(cryptosuite.to_string()),
             created: None,
             expires: None,
             domain: None,
@@ -447,16 +447,21 @@ impl UnsignedVerifiableCredential {
         Ok(serde_jcs::to_vec(self)?)
     }
 
-    /// Sign the Verifiable Credential with an Ed25519 [SigningKey], producing a
-    /// [VerifiableCredential] with a default proof and a computed `proofValue`.
+    /// Sign the Verifiable Credential with a [SigningKey], producing a
+    /// [VerifiableCredential] with a `DataIntegrityProof` whose `cryptosuite` and
+    /// `proofValue` match the key's algorithm (Ed25519 → `eddsa-jcs-2022`, ECDSA P-256/
+    /// P-384 → `ecdsa-jcs-2019`). The signature is taken over the JCS-canonical credential
+    /// and stored as a multibase (base58btc) `proofValue`.
     ///
     /// This performs no schema validation; call
     /// [validate](UnsignedVerifiableCredential::validate) first if you need it.
     pub fn sign(self, signing_key: &SigningKey) -> Result<VerifiableCredential, VcError> {
-        let dalek_key = DalekSigningKey::from_bytes(&signing_key.0);
         let message = self.signing_payload()?;
-        let signature = dalek_key.sign(&message);
-        let proof = Proof::new_eddsa_jcs_2022(BASE64_STANDARD.encode(signature.to_bytes()));
+        let signature = signing_key.sign_message(&message);
+        let proof = Proof::new_data_integrity(
+            signing_key.cryptosuite(),
+            multibase::encode(Base::Base58Btc, signature),
+        );
 
         Ok(VerifiableCredential {
             unsigned: self,
@@ -495,11 +500,11 @@ impl VerifiableCredential {
             }
         }
 
-        // Dispatch on the proof's cryptosuite. Only eddsa-jcs-2022 is implemented today;
-        // reject any other suite with a clear error rather than silently applying Ed25519
-        // to a signature produced by a different algorithm.
+        // Reject any cryptosuite this library does not implement, rather than silently
+        // applying the wrong algorithm. Both supported suites canonicalize with JCS; the
+        // key's algorithm selects the actual verification (see VerifyingKey::verify_message).
         match self.proof.cryptosuite.as_deref() {
-            Some(EDDSA_JCS_2022_CRYPTOSUITE) => {}
+            Some(EDDSA_JCS_2022_CRYPTOSUITE) | Some(ECDSA_JCS_2019_CRYPTOSUITE) => {}
             other => {
                 return Err(VcError::UnsupportedCryptosuite(
                     other.unwrap_or("(none)").to_string(),
@@ -508,96 +513,256 @@ impl VerifiableCredential {
         }
 
         let message = self.unsigned.signing_payload()?;
-        let proof_bytes = BASE64_STANDARD.decode(&self.proof.proof_value)?;
-        let signature = Signature::from_slice(&proof_bytes).map_err(VcError::MalformedSignature)?;
-        let dalek_key =
-            DalekVerifyingKey::from_bytes(&verifying_key.0).map_err(VcError::InvalidPublicKey)?;
+        let (_, signature) = multibase::decode(&self.proof.proof_value)
+            .map_err(|e| VcError::ProofDecode(e.to_string()))?;
 
-        dalek_key
-            .verify(&message, &signature)
-            .map_err(VcError::SignatureVerificationFailed)?;
-        Ok(())
+        verifying_key.verify_message(&message, &signature)
     }
 }
 
-/// A 32-byte Ed25519 private key, used to [sign](UnsignedVerifiableCredential::sign)
-/// credentials.
-///
-/// A distinct type from [VerifyingKey] so the two cannot be swapped by accident —
-/// passing a public key where a private key is expected (or vice versa) is a compile
-/// error rather than a silent runtime failure.
-#[derive(Clone)]
-pub struct SigningKey([u8; 32]);
-
-/// A 32-byte Ed25519 public key, used to [verify](VerifiableCredential::verify)
-/// credentials. See [SigningKey] for why this is a distinct type.
+/// A signature algorithm supported by the toolkit. Each maps to a W3C Data Integrity
+/// cryptosuite: [`Algorithm::Ed25519`] → `eddsa-jcs-2022`; [`Algorithm::P256`] and
+/// [`Algorithm::P384`] → `ecdsa-jcs-2019`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct VerifyingKey([u8; 32]);
+pub enum Algorithm {
+    /// Ed25519 (EdDSA).
+    Ed25519,
+    /// ECDSA over NIST P-256 (a.k.a. secp256r1 / ES256).
+    P256,
+    /// ECDSA over NIST P-384 (a.k.a. secp384r1 / ES384).
+    P384,
+}
+
+impl Algorithm {
+    fn cryptosuite(self) -> &'static str {
+        match self {
+            Algorithm::Ed25519 => EDDSA_JCS_2022_CRYPTOSUITE,
+            Algorithm::P256 | Algorithm::P384 => ECDSA_JCS_2019_CRYPTOSUITE,
+        }
+    }
+}
+
+/// A private signing key for one of the supported [Algorithm]s, used to
+/// [sign](UnsignedVerifiableCredential::sign) credentials.
+///
+/// A distinct type from [VerifyingKey] so the two cannot be swapped by accident.
+#[derive(Clone)]
+pub enum SigningKey {
+    /// Ed25519 signing key.
+    Ed25519(DalekSigningKey),
+    /// ECDSA P-256 signing key.
+    P256(p256::ecdsa::SigningKey),
+    /// ECDSA P-384 signing key.
+    P384(p384::ecdsa::SigningKey),
+}
+
+/// A public verifying key for one of the supported [Algorithm]s, used to
+/// [verify](VerifiableCredential::verify) credentials. See [SigningKey] for why this is a
+/// distinct type.
+#[derive(Clone)]
+pub enum VerifyingKey {
+    /// Ed25519 verifying key.
+    Ed25519(DalekVerifyingKey),
+    /// ECDSA P-256 verifying key.
+    P256(p256::ecdsa::VerifyingKey),
+    /// ECDSA P-384 verifying key.
+    P384(p384::ecdsa::VerifyingKey),
+}
 
 impl SigningKey {
-    /// Construct a signing key from exactly 32 bytes.
+    /// Construct an **Ed25519** signing key from exactly 32 seed bytes. For other
+    /// algorithms use [from_pkcs8_pem](SigningKey::from_pkcs8_pem) or
+    /// [generate_keypair_for].
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, VcError> {
         let array: [u8; 32] = bytes
             .try_into()
             .map_err(|_| VcError::InvalidPrivateKeyLength)?;
-        Ok(Self(array))
+        Ok(Self::Ed25519(DalekSigningKey::from_bytes(&array)))
     }
 
-    /// The raw 32-byte representation of the key.
-    pub fn to_bytes(&self) -> [u8; 32] {
-        self.0
+    /// Parse a PKCS#8 PEM private key, dispatching on its algorithm (Ed25519, P-256, or
+    /// P-384).
+    pub fn from_pkcs8_pem(pem: &str) -> Result<Self, VcError> {
+        use ed25519_dalek::pkcs8::DecodePrivateKey as _;
+
+        if let Ok(k) = DalekSigningKey::from_pkcs8_pem(pem) {
+            return Ok(Self::Ed25519(k));
+        }
+        if let Ok(k) = p256::ecdsa::SigningKey::from_pkcs8_pem(pem) {
+            return Ok(Self::P256(k));
+        }
+        if let Ok(k) = p384::ecdsa::SigningKey::from_pkcs8_pem(pem) {
+            return Ok(Self::P384(k));
+        }
+        Err(VcError::KeyParse(
+            "PKCS#8 PEM is not a supported Ed25519/P-256/P-384 private key".to_string(),
+        ))
+    }
+
+    /// The signature algorithm of this key.
+    pub fn algorithm(&self) -> Algorithm {
+        match self {
+            SigningKey::Ed25519(_) => Algorithm::Ed25519,
+            SigningKey::P256(_) => Algorithm::P256,
+            SigningKey::P384(_) => Algorithm::P384,
+        }
+    }
+
+    /// The raw private-key bytes (Ed25519: 32-byte seed; ECDSA: the big-endian scalar).
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            SigningKey::Ed25519(k) => k.to_bytes().to_vec(),
+            SigningKey::P256(k) => k.to_bytes().as_slice().to_vec(),
+            SigningKey::P384(k) => k.to_bytes().as_slice().to_vec(),
+        }
+    }
+
+    /// The Data Integrity cryptosuite identifier produced when signing with this key.
+    pub(crate) fn cryptosuite(&self) -> &'static str {
+        self.algorithm().cryptosuite()
+    }
+
+    /// The [VerifyingKey] corresponding to this signing key.
+    pub fn verifying_key(&self) -> VerifyingKey {
+        match self {
+            SigningKey::Ed25519(k) => VerifyingKey::Ed25519(k.verifying_key()),
+            SigningKey::P256(k) => VerifyingKey::P256(*k.verifying_key()),
+            SigningKey::P384(k) => VerifyingKey::P384(*k.verifying_key()),
+        }
+    }
+
+    /// Sign `message`, returning the raw signature bytes (Ed25519: 64 bytes; ECDSA:
+    /// fixed-size IEEE-P1363 `r‖s`).
+    pub(crate) fn sign_message(&self, message: &[u8]) -> Vec<u8> {
+        match self {
+            SigningKey::Ed25519(k) => k.sign(message).to_bytes().to_vec(),
+            SigningKey::P256(k) => {
+                let sig: p256::ecdsa::Signature = k.sign(message);
+                sig.to_bytes().as_slice().to_vec()
+            }
+            SigningKey::P384(k) => {
+                let sig: p384::ecdsa::Signature = k.sign(message);
+                sig.to_bytes().as_slice().to_vec()
+            }
+        }
     }
 }
 
 impl VerifyingKey {
-    /// Construct a verifying key from exactly 32 bytes.
+    /// Construct an **Ed25519** verifying key from exactly 32 bytes. For other algorithms
+    /// use [from_pem](VerifyingKey::from_pem).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, VcError> {
         let array: [u8; 32] = bytes
             .try_into()
             .map_err(|_| VcError::InvalidPublicKeyLength)?;
-        Ok(Self(array))
+        Ok(Self::Ed25519(
+            DalekVerifyingKey::from_bytes(&array).map_err(VcError::InvalidPublicKey)?,
+        ))
     }
 
-    /// The raw 32-byte representation of the key.
-    pub fn to_bytes(&self) -> [u8; 32] {
-        self.0
+    /// Parse a SubjectPublicKeyInfo PEM (`-----BEGIN PUBLIC KEY-----`), dispatching on the
+    /// key's algorithm OID — Ed25519, ECDSA P-256, or ECDSA P-384. This is the form
+    /// returned as `publicKeyPem` in DID documents.
+    pub fn from_pem(pem: &str) -> Result<Self, VcError> {
+        let parsed = pem::parse(pem).map_err(|e| VcError::KeyParse(e.to_string()))?;
+        Self::from_spki_der(parsed.contents())
     }
-}
 
-impl From<[u8; 32]> for SigningKey {
-    fn from(bytes: [u8; 32]) -> Self {
-        Self(bytes)
+    /// Parse a DER-encoded SubjectPublicKeyInfo, dispatching on the algorithm OID.
+    pub fn from_spki_der(der: &[u8]) -> Result<Self, VcError> {
+        use spki::der::Decode;
+
+        let spki = spki::SubjectPublicKeyInfoRef::from_der(der)
+            .map_err(|e| VcError::KeyParse(e.to_string()))?;
+        let key_bytes = spki.subject_public_key.raw_bytes();
+
+        match spki.algorithm.oid.to_string().as_str() {
+            // id-Ed25519
+            "1.3.101.112" => {
+                let array: [u8; 32] = key_bytes
+                    .try_into()
+                    .map_err(|_| VcError::KeyParse("Ed25519 public key must be 32 bytes".into()))?;
+                Ok(Self::Ed25519(
+                    DalekVerifyingKey::from_bytes(&array).map_err(VcError::InvalidPublicKey)?,
+                ))
+            }
+            // id-ecPublicKey: curve is named in the algorithm parameters
+            "1.2.840.10045.2.1" => {
+                let curve = spki
+                    .algorithm
+                    .parameters_oid()
+                    .map_err(|e| VcError::KeyParse(e.to_string()))?;
+                match curve.to_string().as_str() {
+                    // secp256r1 / prime256v1
+                    "1.2.840.10045.3.1.7" => Ok(Self::P256(
+                        p256::ecdsa::VerifyingKey::from_sec1_bytes(key_bytes)
+                            .map_err(|e| VcError::KeyParse(e.to_string()))?,
+                    )),
+                    // secp384r1
+                    "1.3.132.0.34" => Ok(Self::P384(
+                        p384::ecdsa::VerifyingKey::from_sec1_bytes(key_bytes)
+                            .map_err(|e| VcError::KeyParse(e.to_string()))?,
+                    )),
+                    other => Err(VcError::UnsupportedKeyType(format!("EC curve {other}"))),
+                }
+            }
+            other => Err(VcError::UnsupportedKeyType(format!(
+                "SPKI algorithm OID {other}"
+            ))),
+        }
     }
-}
 
-impl From<[u8; 32]> for VerifyingKey {
-    fn from(bytes: [u8; 32]) -> Self {
-        Self(bytes)
+    /// The signature algorithm of this key.
+    pub fn algorithm(&self) -> Algorithm {
+        match self {
+            VerifyingKey::Ed25519(_) => Algorithm::Ed25519,
+            VerifyingKey::P256(_) => Algorithm::P256,
+            VerifyingKey::P384(_) => Algorithm::P384,
+        }
     }
-}
 
-impl TryFrom<&[u8]> for SigningKey {
-    type Error = VcError;
-    fn try_from(bytes: &[u8]) -> Result<Self, VcError> {
-        Self::from_bytes(bytes)
+    /// The raw public-key bytes (Ed25519: 32 bytes; ECDSA: the uncompressed SEC1 point).
+    pub fn to_bytes(&self) -> Vec<u8> {
+        match self {
+            VerifyingKey::Ed25519(k) => k.to_bytes().to_vec(),
+            VerifyingKey::P256(k) => k.to_encoded_point(false).as_bytes().to_vec(),
+            VerifyingKey::P384(k) => k.to_encoded_point(false).as_bytes().to_vec(),
+        }
     }
-}
 
-impl TryFrom<&[u8]> for VerifyingKey {
-    type Error = VcError;
-    fn try_from(bytes: &[u8]) -> Result<Self, VcError> {
-        Self::from_bytes(bytes)
+    /// Verify `signature` over `message` using this key's algorithm.
+    pub(crate) fn verify_message(&self, message: &[u8], signature: &[u8]) -> Result<(), VcError> {
+        match self {
+            VerifyingKey::Ed25519(k) => {
+                let sig = Signature::from_slice(signature)
+                    .map_err(|e| VcError::MalformedSignature(e.to_string()))?;
+                k.verify(message, &sig)
+                    .map_err(|e| VcError::SignatureVerificationFailed(e.to_string()))
+            }
+            VerifyingKey::P256(k) => {
+                let sig = p256::ecdsa::Signature::from_slice(signature)
+                    .map_err(|e| VcError::MalformedSignature(e.to_string()))?;
+                k.verify(message, &sig)
+                    .map_err(|e| VcError::SignatureVerificationFailed(e.to_string()))
+            }
+            VerifyingKey::P384(k) => {
+                let sig = p384::ecdsa::Signature::from_slice(signature)
+                    .map_err(|e| VcError::MalformedSignature(e.to_string()))?;
+                k.verify(message, &sig)
+                    .map_err(|e| VcError::SignatureVerificationFailed(e.to_string()))
+            }
+        }
     }
 }
 
 // Redact the secret in Debug output so it can't leak into logs.
 impl fmt::Debug for SigningKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("SigningKey([REDACTED])")
+        write!(f, "SigningKey::{:?}([REDACTED])", self.algorithm())
     }
 }
 
-/// An Ed25519 key pair produced by [generate_keypair].
+/// A key pair produced by [generate_keypair] / [generate_keypair_for].
 #[derive(Clone)]
 pub struct KeyPair {
     /// The private key used to sign credentials.
@@ -606,14 +771,22 @@ pub struct KeyPair {
     pub verifying_key: VerifyingKey,
 }
 
-/// Generate a new Ed25519 [KeyPair].
+/// Generate a new Ed25519 [KeyPair]. For another algorithm use [generate_keypair_for].
 pub fn generate_keypair() -> KeyPair {
-    let mut csprng = OsRng;
-    let signing_key = DalekSigningKey::generate(&mut csprng);
-    let verifying_key = signing_key.verifying_key();
+    generate_keypair_for(Algorithm::Ed25519)
+}
 
+/// Generate a new [KeyPair] for the given [Algorithm].
+pub fn generate_keypair_for(algorithm: Algorithm) -> KeyPair {
+    let mut csprng = OsRng;
+    let signing_key = match algorithm {
+        Algorithm::Ed25519 => SigningKey::Ed25519(DalekSigningKey::generate(&mut csprng)),
+        Algorithm::P256 => SigningKey::P256(p256::ecdsa::SigningKey::random(&mut csprng)),
+        Algorithm::P384 => SigningKey::P384(p384::ecdsa::SigningKey::random(&mut csprng)),
+    };
+    let verifying_key = signing_key.verifying_key();
     KeyPair {
-        signing_key: SigningKey(signing_key.to_bytes()),
-        verifying_key: VerifyingKey(verifying_key.to_bytes()),
+        signing_key,
+        verifying_key,
     }
 }

@@ -40,21 +40,31 @@ pub enum VcError {
     #[error("the credential has expired (validUntil check failed)")]
     Expired,
 
-    /// The `proofValue` was not valid base64.
-    #[error("failed to decode proofValue from base64: {0}")]
-    ProofDecode(#[from] base64::DecodeError),
+    /// The `proofValue` could not be decoded from its multibase representation.
+    #[error("failed to decode proofValue: {0}")]
+    ProofDecode(String),
 
-    /// The decoded `proofValue` was not a well-formed Ed25519 signature.
-    #[error("malformed signature in proof")]
-    MalformedSignature(#[source] ed25519_dalek::SignatureError),
+    /// The decoded `proofValue` was not a well-formed signature for the proof's
+    /// cryptosuite (e.g. wrong length).
+    #[error("malformed signature in proof: {0}")]
+    MalformedSignature(String),
 
     /// The supplied public key bytes were not a valid Ed25519 verifying key.
     #[error("invalid public key")]
     InvalidPublicKey(#[source] ed25519_dalek::SignatureError),
 
+    /// A public or private key could not be parsed (e.g. from PEM/SPKI), or its
+    /// encoding did not match the expected algorithm.
+    #[error("failed to parse key: {0}")]
+    KeyParse(String),
+
+    /// The key's algorithm (or a PEM/SPKI key OID) is not one this library supports.
+    #[error("unsupported key type: {0}")]
+    UnsupportedKeyType(String),
+
     /// The signature did not verify against the credential and public key.
-    #[error("signature verification failed")]
-    SignatureVerificationFailed(#[source] ed25519_dalek::SignatureError),
+    #[error("signature verification failed: {0}")]
+    SignatureVerificationFailed(String),
 
     /// A serialization-format codec (e.g. CBOR or Protobuf) failed to decode or
     /// encode a credential. Carries the underlying format-specific error.
