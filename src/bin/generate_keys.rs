@@ -17,7 +17,9 @@ struct Cli {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    let (signing_key, verifying_key): ([u8; 32], [u8; 32]) = generate_keypair();
+    let keypair = generate_keypair();
+    let signing_key = keypair.signing_key.to_bytes();
+    let verifying_key = keypair.verifying_key.to_bytes();
 
     // Get the current time for the file names
     let start = SystemTime::now();

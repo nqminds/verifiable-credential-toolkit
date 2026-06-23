@@ -1,2 +1,10 @@
 /target
 **/pkg
+**/node_modules
+
+# Browser example: index.js is compiled from index.ts by `tsc` (npm run build).
+/wasm_js_example_usage/index.js
+
+# Protobuf bindings are generated at build time by build.rs into OUT_DIR.
+# Guard against a stray generated copy being committed back into the source tree.
+/src/proto_schemas/vc.rs

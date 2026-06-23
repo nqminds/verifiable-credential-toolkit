@@ -12,16 +12,12 @@ use verifiable_credential_toolkit::{
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── Step 1: Generate an Ed25519 keypair ─────────────────────────────
     println!("=== Step 1: Generate Ed25519 keypair ===\n");
-    let (private_key, public_key) = generate_keypair();
+    let keypair = generate_keypair();
+    let signing_key = keypair.signing_key;
+    let verifying_key = keypair.verifying_key;
     println!(
-        "Private key ({} bytes): {:?}",
-        private_key.len(),
-        &private_key[..8]
-    );
-    println!(
-        "Public key  ({} bytes): {:?}\n",
-        public_key.len(),
-        &public_key[..8]
+        "Public key (32 bytes): {:?}\n",
+        &verifying_key.to_bytes()[..8]
     );
 
     // ── Step 2: Define an unsigned Verifiable Credential ────────────────
@@ -48,7 +44,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Step 3: Sign the credential ─────────────────────────────────────
     println!("=== Step 3: Sign the credential ===\n");
-    let signed_vc: VerifiableCredential = unsigned_vc.sign(private_key)?;
+    let signed_vc: VerifiableCredential = unsigned_vc.sign(&signing_key)?;
     println!("Proof type: {}", signed_vc.proof.proof_type);
     println!("Proof purpose: {}", signed_vc.proof.proof_purpose);
     println!(
@@ -58,7 +54,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ── Step 4: Verify the credential ───────────────────────────────────
     println!("=== Step 4: Verify the credential ===\n");
-    match signed_vc.verify(&public_key) {
+    match signed_vc.verify(&verifying_key) {
         Ok(()) => println!("✓ Credential signature is valid!"),
         Err(e) => println!("✗ Verification failed: {}", e),
     }
@@ -69,7 +65,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tampered_json = tampered_json.replace("Temperature Sensor Alpha", "TAMPERED NAME");
     let tampered_vc: VerifiableCredential = serde_json::from_str(&tampered_json)?;
 
-    match tampered_vc.verify(&public_key) {
+    match tampered_vc.verify(&verifying_key) {
         Ok(()) => println!("✗ Tampered credential was accepted (unexpected!)"),
         Err(e) => println!("✓ Tampered credential correctly rejected: {}", e),
     }

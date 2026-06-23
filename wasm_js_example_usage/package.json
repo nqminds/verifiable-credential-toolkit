@@ -1,0 +1,14 @@
+{
+  "name": "wasm_js_example_usage",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Browser example exercising the verifiable-credential-toolkit WASM API",
+  "scripts": {
+    "build": "cargo build --target wasm32-unknown-unknown --release --manifest-path ../Cargo.toml && wasm-bindgen --target web --out-dir pkg ../target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm && tsc",
+    "serve": "python3 -m http.server 8080"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  },
+  "license": "ISC"
+}

@@ -1,16 +1,24 @@
 use base64::{prelude::BASE64_STANDARD, Engine};
 use chrono::{DateTime, Utc};
-use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use ed25519_dalek::{
+    Signature, Signer, SigningKey as DalekSigningKey, Verifier, VerifyingKey as DalekVerifyingKey,
+};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::formats::PreferOne;
 use serde_with::{serde_as, OneOrMany};
 use std::collections::HashMap;
+use std::fmt;
 use url::Url;
 
+pub mod bindings;
+pub mod error;
+pub mod proto_schemas;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
+
+pub use error::VcError;
 
 /// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - <https://www.w3.org/TR/vc-data-model-2.0> WITHOUT the proof
 #[serde_as]
@@ -52,6 +60,79 @@ pub struct UnsignedVerifiableCredential {
     pub credential_schema: Option<Vec<CredentialSchema>>,
 }
 
+/// A fluent builder for [UnsignedVerifiableCredential].
+///
+/// Mirrors the consuming-`self` builder on [Proof]: start from
+/// [UnsignedVerifiableCredential::builder] with the required fields, chain the
+/// optional setters, then call [build](UnsignedVerifiableCredentialBuilder::build).
+///
+/// ```
+/// # use verifiable_credential_toolkit::{UnsignedVerifiableCredential, Issuer};
+/// # use url::Url;
+/// # use serde_json::json;
+/// let vc = UnsignedVerifiableCredential::builder(
+///     vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
+///     vec!["VerifiableCredential".to_string()],
+///     Issuer::Url(Url::parse("https://example.com/issuer").unwrap()),
+///     json!({ "id": "urn:uuid:device-1", "name": "Sensor A" }),
+/// )
+/// .id(Url::parse("urn:uuid:9a3e3c0e-2db0-412a-95c7-cf5520ba78df").unwrap())
+/// .build();
+/// ```
+#[derive(Debug, Clone)]
+pub struct UnsignedVerifiableCredentialBuilder {
+    inner: UnsignedVerifiableCredential,
+}
+
+impl UnsignedVerifiableCredentialBuilder {
+    /// Set the credential `id`.
+    pub fn id(mut self, id: Url) -> Self {
+        self.inner.id = Some(id);
+        self
+    }
+
+    /// Set the credential `name`.
+    pub fn name(mut self, name: LanguageValue) -> Self {
+        self.inner.name = Some(name);
+        self
+    }
+
+    /// Set the credential `description`.
+    pub fn description(mut self, description: LanguageValue) -> Self {
+        self.inner.description = Some(description);
+        self
+    }
+
+    /// Set the `validFrom` timestamp.
+    pub fn valid_from(mut self, valid_from: DateTime<Utc>) -> Self {
+        self.inner.valid_from = Some(valid_from);
+        self
+    }
+
+    /// Set the `validUntil` timestamp.
+    pub fn valid_until(mut self, valid_until: DateTime<Utc>) -> Self {
+        self.inner.valid_until = Some(valid_until);
+        self
+    }
+
+    /// Set the `credentialStatus`.
+    pub fn credential_status(mut self, credential_status: Status) -> Self {
+        self.inner.credential_status = Some(credential_status);
+        self
+    }
+
+    /// Set the `credentialSchema` list.
+    pub fn credential_schema(mut self, credential_schema: Vec<CredentialSchema>) -> Self {
+        self.inner.credential_schema = Some(credential_schema);
+        self
+    }
+
+    /// Finish building and return the [UnsignedVerifiableCredential].
+    pub fn build(self) -> UnsignedVerifiableCredential {
+        self.inner
+    }
+}
+
 /// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - <https://www.w3.org/TR/vc-data-model-2.0>, this adds the proof to the UnsignedVerifiableCredential struct
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -87,6 +168,7 @@ pub struct VerifiablePresentation {
 
 /// <https://www.w3.org/TR/vc-data-model-2.0/#holder>
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
+#[serde(untagged)]
 pub enum Holder {
     Url(Url),
     Object(HolderObject),
@@ -95,9 +177,9 @@ pub enum Holder {
 /// <https://www.w3.org/TR/vc-data-model-2.0/#holder>
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct HolderObject {
-    id: Url,
+    pub id: Url,
     #[serde(flatten)]
-    additional_properties: Option<HashMap<String, Value>>,
+    pub additional_properties: Option<HashMap<String, Value>>,
 }
 
 /// <https://www.w3.org/TR/vc-data-model-2.0/#issuer>
@@ -111,9 +193,9 @@ pub enum Issuer {
 /// <https://www.w3.org/TR/vc-data-model-2.0/#issuer>
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct IssuerObject {
-    id: Url,
+    pub id: Url,
     #[serde(flatten)]
-    additional_properties: Option<HashMap<String, Value>>,
+    pub additional_properties: Option<HashMap<String, Value>>,
 }
 
 /// <https://www.w3.org/TR/vc-data-model-2.0/#names-and-descriptions>
@@ -128,21 +210,21 @@ pub enum LanguageValue {
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct LanguageObject {
     #[serde(rename = "@value")]
-    value: String,
+    pub value: String,
     #[serde(rename = "@language", skip_serializing_if = "Option::is_none")]
-    language: Option<String>,
+    pub language: Option<String>,
     #[serde(rename = "@direction", skip_serializing_if = "Option::is_none")]
-    direction: Option<String>,
+    pub direction: Option<String>,
 }
 /// <https://www.w3.org/TR/vc-data-model-2.0/#status>
 #[serde_as]
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 pub struct Status {
     #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
-    id: Option<Url>,
+    pub id: Option<Url>,
     #[serde(rename = "type")]
     #[serde_as(as = "OneOrMany<_, PreferOne>")]
-    status_type: Vec<String>,
+    pub status_type: Vec<String>,
 }
 /// <https://www.w3.org/TR/vc-data-model-2.0/#data-schemas>
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
@@ -185,6 +267,26 @@ pub struct Proof {
 }
 
 impl Proof {
+    /// Construct a default EdDSA data-integrity proof carrying the given base64-encoded
+    /// `proofValue`. Uses the `eddsa-jcs-2022` cryptosuite, matching the JCS (RFC 8785)
+    /// canonicalization [signing](UnsignedVerifiableCredential::sign) applies.
+    fn new_eddsa_jcs_2022(proof_value: String) -> Self {
+        Proof {
+            id: None,
+            proof_type: "DataIntegrityProof".to_string(),
+            proof_purpose: "assertionMethod".to_string(),
+            verification_method: None,
+            cryptosuite: Some("eddsa-jcs-2022".to_string()),
+            created: None,
+            expires: None,
+            domain: None,
+            challenge: None,
+            proof_value,
+            previous_proof: None,
+            nonce: None,
+        }
+    }
+
     /// Set the ID of the proof
     pub fn set_id(mut self, id: Url) -> Self {
         self.id = Some(id);
@@ -252,141 +354,105 @@ impl Proof {
     }
 }
 
-impl UnsignedVerifiableCredential {
-    /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue.
-    pub fn sign(
-        self,
-        private_key: impl AsRef<[u8]>,
-    ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
-        let private_key_slice = private_key.as_ref();
-        let private_key_array: [u8; 32] = private_key_slice.try_into().map_err(|_| {
-            "Invalid private key length: expected 32 bytes, but received a different size."
-        })?;
-        let signing_key = SigningKey::from_bytes(&private_key_array);
-        let message = serde_json::to_string(&self)
-            .map_err(|e| format!("Failed to serialize credential during sign: {}", e))?
-            .as_bytes()
-            .to_vec();
-        let signature = signing_key.sign(&message);
+/// Where a JSON Schema used to validate a credential's `credentialSubject` comes from.
+///
+/// Passing this to [UnsignedVerifiableCredential::validate] /
+/// [VerifiableCredential::validate] keeps schema validation a separate, composable
+/// step from signing and verification, rather than spawning a method per schema source.
+#[derive(Debug, Clone)]
+pub enum SchemaSource<'a> {
+    /// Do not perform any schema validation.
+    None,
+    /// Validate against an in-memory JSON Schema document.
+    Inline(&'a Value),
+    /// Fetch the JSON Schema from a URL, then validate. Not available on `wasm32`.
+    #[cfg(not(target_arch = "wasm32"))]
+    Url(&'a str),
+}
 
-        let proof = Proof {
-            id: None,
-            proof_type: "Ed25519Signature2018".to_string(),
-            proof_purpose: "assertionMethod".to_string(),
-            verification_method: None,
-            cryptosuite: None,
-            created: None,
-            expires: None,
-            domain: None,
-            challenge: None,
-            proof_value: BASE64_STANDARD.encode(signature.to_bytes()),
-            previous_proof: None,
-            nonce: None,
-        };
-
-        Ok(VerifiableCredential {
-            unsigned: self,
-            proof,
-        })
-    }
-
-    /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue. Also performs a JSON schema check on the credentialSubject.
-    pub fn sign_with_schema_check(
-        self,
-        private_key: impl AsRef<[u8]>,
-        schema: &Value,
-    ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
-        // Validate the credentialSubject against the provided schema
-        let credential_subject = &self.credential_subject;
-
-        if !jsonschema::is_valid(schema, credential_subject) {
-            return Err("Credential subject does not match schema".into());
+impl SchemaSource<'_> {
+    /// Resolve the schema to a concrete JSON document, fetching it over HTTP if necessary.
+    /// Returns `None` when no validation is requested.
+    fn resolve(&self) -> Result<Option<Value>, VcError> {
+        match self {
+            SchemaSource::None => Ok(None),
+            SchemaSource::Inline(schema) => Ok(Some(Value::clone(schema))),
+            #[cfg(not(target_arch = "wasm32"))]
+            SchemaSource::Url(url) => {
+                let schema_text = reqwest::blocking::get(*url)?.text()?;
+                let schema: Value = serde_json::from_str(&schema_text)?;
+                Ok(Some(schema))
+            }
         }
-
-        // Proceed with signing if validation is successful
-        let private_key_slice = private_key.as_ref();
-        let private_key_array: [u8; 32] = private_key_slice.try_into().map_err(|_| {
-            "Invalid private key length: expected 32 bytes, but received a different size."
-        })?;
-        let signing_key = SigningKey::from_bytes(&private_key_array);
-        let message = serde_json::to_string(&self)
-            .map_err(|e| format!("Failed to serialize credential during sign: {}", e))?
-            .as_bytes()
-            .to_vec();
-        let signature = signing_key.sign(&message);
-
-        let proof = Proof {
-            id: None,
-            proof_type: "Ed25519Signature2018".to_string(),
-            proof_purpose: "assertionMethod".to_string(),
-            verification_method: None,
-            cryptosuite: None,
-            created: None,
-            expires: None,
-            domain: None,
-            challenge: None,
-            proof_value: BASE64_STANDARD.encode(signature.to_bytes()),
-            previous_proof: None,
-            nonce: None,
-        };
-
-        Ok(VerifiableCredential {
-            unsigned: self,
-            proof,
-        })
     }
 }
 
-#[cfg(not(target_arch = "wasm32"))]
-impl UnsignedVerifiableCredential {
-    /// Sign the Verifiable Credential with a private key. Creates a proof with default values and a custom proofValue. Also performs a JSON schema check on the credentialSubject. The schema is fetched from a URL.
-    pub fn sign_with_schema_check_from_url(
-        self,
-        private_key: impl AsRef<[u8]>,
-        schema_url: &str,
-    ) -> Result<VerifiableCredential, Box<dyn std::error::Error>> {
-        // Attempt to get the schema from the URL using reqwest
-
-        let response = reqwest::blocking::get(schema_url)
-            .map_err(|e| format!("Failed to fetch schema from URL: {}", e))?;
-        let schema_text = response
-            .text()
-            .map_err(|e| format!("Failed to read schema text: {}", e))?;
-        let schema: Value = serde_json::from_str(&schema_text)
-            .map_err(|e| format!("Failed to parse schema JSON: {}", e))?;
-
-        // Validate the credentialSubject against the schema
-        let credential_subject = &self.credential_subject;
-        if !jsonschema::is_valid(&schema, credential_subject) {
-            return Err("Credential subject does not match schema".into());
+/// Validate a `credentialSubject` against a [SchemaSource].
+fn validate_subject(subject: &Value, schema: &SchemaSource) -> Result<(), VcError> {
+    if let Some(schema) = schema.resolve()? {
+        if !jsonschema::is_valid(&schema, subject) {
+            return Err(VcError::SchemaMismatch);
         }
+    }
+    Ok(())
+}
 
-        // Proceed with signing if validation is successful
-        let private_key_slice = private_key.as_ref();
-        let private_key_array: [u8; 32] = private_key_slice.try_into().map_err(|_| {
-            "Invalid private key length: expected 32 bytes, but received a different size."
-        })?;
-        let signing_key = SigningKey::from_bytes(&private_key_array);
-        let message = serde_json::to_string(&self)
-            .map_err(|e| format!("Failed to serialize credential during sign: {}", e))?
-            .as_bytes()
-            .to_vec();
-        let signature = signing_key.sign(&message);
+impl UnsignedVerifiableCredential {
+    /// Start building a credential from its required fields (`@context`, `type`,
+    /// `issuer`, `credentialSubject`). Chain optional setters on the returned
+    /// [UnsignedVerifiableCredentialBuilder], then call `.build()`.
+    pub fn builder(
+        context: Vec<Url>,
+        credential_type: Vec<String>,
+        issuer: Issuer,
+        credential_subject: Value,
+    ) -> UnsignedVerifiableCredentialBuilder {
+        UnsignedVerifiableCredentialBuilder {
+            inner: UnsignedVerifiableCredential {
+                context,
+                id: None,
+                credential_type,
+                name: None,
+                description: None,
+                issuer,
+                credential_subject,
+                valid_from: None,
+                valid_until: None,
+                credential_status: None,
+                credential_schema: None,
+            },
+        }
+    }
 
-        let proof = Proof {
-            id: None,
-            proof_type: "Ed25519Signature2018".to_string(),
-            proof_purpose: "assertionMethod".to_string(),
-            verification_method: None,
-            cryptosuite: None,
-            created: None,
-            expires: None,
-            domain: None,
-            challenge: None,
-            proof_value: BASE64_STANDARD.encode(signature.to_bytes()),
-            previous_proof: None,
-            nonce: None,
-        };
+    /// Validate this credential's `credentialSubject` against a [SchemaSource].
+    ///
+    /// Call this before [sign](UnsignedVerifiableCredential::sign) when you need
+    /// schema validation, e.g. `vc.validate(&schema)?; vc.sign(key)?`.
+    pub fn validate(&self, schema: &SchemaSource) -> Result<(), VcError> {
+        validate_subject(&self.credential_subject, schema)
+    }
+
+    /// The exact bytes that are signed and verified: the credential serialized with
+    /// JCS canonicalization (RFC 8785), as required by the VC Data Integrity JSON
+    /// cryptosuite. Canonicalizing makes the signed representation deterministic and
+    /// independent of map iteration order or JSON-library quirks, so a signature
+    /// survives a serialize/deserialize round-trip and is portable across
+    /// implementations. Without it, the unordered `additional_properties` maps on
+    /// `issuer`/`holder` objects would serialize inconsistently and break verification.
+    fn signing_payload(&self) -> Result<Vec<u8>, VcError> {
+        Ok(serde_jcs::to_vec(self)?)
+    }
+
+    /// Sign the Verifiable Credential with an Ed25519 [SigningKey], producing a
+    /// [VerifiableCredential] with a default proof and a computed `proofValue`.
+    ///
+    /// This performs no schema validation; call
+    /// [validate](UnsignedVerifiableCredential::validate) first if you need it.
+    pub fn sign(self, signing_key: &SigningKey) -> Result<VerifiableCredential, VcError> {
+        let dalek_key = DalekSigningKey::from_bytes(&signing_key.0);
+        let message = self.signing_payload()?;
+        let signature = dalek_key.sign(&message);
+        let proof = Proof::new_eddsa_jcs_2022(BASE64_STANDARD.encode(signature.to_bytes()));
 
         Ok(VerifiableCredential {
             unsigned: self,
@@ -401,76 +467,137 @@ impl VerifiableCredential {
         self.unsigned
     }
 
-    /// Verifies the contents of a Verifiable Credential against a public key
-    pub fn verify(&self, public_key: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+    /// Validate the embedded `credentialSubject` against a [SchemaSource].
+    ///
+    /// Call this alongside [verify](VerifiableCredential::verify) when you need
+    /// schema validation, e.g. `vc.validate(&schema)?; vc.verify(key)?`.
+    pub fn validate(&self, schema: &SchemaSource) -> Result<(), VcError> {
+        self.unsigned.validate(schema)
+    }
+
+    /// Verifies the contents of a Verifiable Credential against a [VerifyingKey]
+    pub fn verify(&self, verifying_key: &VerifyingKey) -> Result<(), VcError> {
         let now = Utc::now();
 
         // Check if the current timestamp is within the validity period
         if let Some(valid_from) = self.unsigned.valid_from {
             if now < valid_from {
-                return Err("The credential is not yet valid (validFrom check failed).".into());
+                return Err(VcError::NotYetValid);
             }
         }
         if let Some(valid_until) = self.unsigned.valid_until {
             if now > valid_until {
-                return Err("The credential has expired (validUntil check failed).".into());
+                return Err(VcError::Expired);
             }
         }
 
-        let message = serde_json::to_string(&self.unsigned).map_err(|e| {
-            format!(
-                "Failed to serialize unsigned credential during verification: {}",
-                e
-            )
-        })?;
-        let proof_bytes = BASE64_STANDARD
-            .decode(&self.proof.proof_value)
-            .map_err(|e| format!("Failed to decode proof value from base64: {}", e))?;
-        let signature = Signature::from_slice(&proof_bytes)
-            .map_err(|e| format!("Failed to create signature from proof bytes: {}", e))?;
-        let public_key_array: [u8; 32] = public_key.try_into().map_err(|_| {
-            "Invalid public key length: expected 32 bytes, but received a different size."
-        })?;
-        let public_key = VerifyingKey::from_bytes(&public_key_array).map_err(|e| {
-            format!(
-                "Failed to create verifying key from public key bytes: {}",
-                e
-            )
-        })?;
+        let message = self.unsigned.signing_payload()?;
+        let proof_bytes = BASE64_STANDARD.decode(&self.proof.proof_value)?;
+        let signature = Signature::from_slice(&proof_bytes).map_err(VcError::MalformedSignature)?;
+        let dalek_key =
+            DalekVerifyingKey::from_bytes(&verifying_key.0).map_err(VcError::InvalidPublicKey)?;
 
-        public_key
-            .verify(message.as_bytes(), &signature)
-            .map_err(|e| format!("Failed to verify the credential signature: {}", e))?;
+        dalek_key
+            .verify(&message, &signature)
+            .map_err(VcError::SignatureVerificationFailed)?;
         Ok(())
-    }
-
-    /// Verifies the contents of a Verifiable Credential against a public key and schema
-    pub fn verify_with_schema_check(
-        &self,
-        public_key: &[u8],
-        schema: &Value,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        // Validate the credentialSubject against the provided schema
-        let credential_subject = &self.unsigned.credential_subject;
-
-        if !jsonschema::is_valid(schema, credential_subject) {
-            return Err("Credential subject does not match schema".into());
-        }
-
-        // Proceed with signature verification if validation is successful
-        self.verify(public_key)
     }
 }
 
-/// Generate a new Ed25519 keypair tuple. First is the signing key, second is the verifying key.
-pub fn generate_keypair() -> ([u8; 32], [u8; 32]) {
+/// A 32-byte Ed25519 private key, used to [sign](UnsignedVerifiableCredential::sign)
+/// credentials.
+///
+/// A distinct type from [VerifyingKey] so the two cannot be swapped by accident —
+/// passing a public key where a private key is expected (or vice versa) is a compile
+/// error rather than a silent runtime failure.
+#[derive(Clone)]
+pub struct SigningKey([u8; 32]);
+
+/// A 32-byte Ed25519 public key, used to [verify](VerifiableCredential::verify)
+/// credentials. See [SigningKey] for why this is a distinct type.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct VerifyingKey([u8; 32]);
+
+impl SigningKey {
+    /// Construct a signing key from exactly 32 bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, VcError> {
+        let array: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| VcError::InvalidPrivateKeyLength)?;
+        Ok(Self(array))
+    }
+
+    /// The raw 32-byte representation of the key.
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl VerifyingKey {
+    /// Construct a verifying key from exactly 32 bytes.
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, VcError> {
+        let array: [u8; 32] = bytes
+            .try_into()
+            .map_err(|_| VcError::InvalidPublicKeyLength)?;
+        Ok(Self(array))
+    }
+
+    /// The raw 32-byte representation of the key.
+    pub fn to_bytes(&self) -> [u8; 32] {
+        self.0
+    }
+}
+
+impl From<[u8; 32]> for SigningKey {
+    fn from(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+}
+
+impl From<[u8; 32]> for VerifyingKey {
+    fn from(bytes: [u8; 32]) -> Self {
+        Self(bytes)
+    }
+}
+
+impl TryFrom<&[u8]> for SigningKey {
+    type Error = VcError;
+    fn try_from(bytes: &[u8]) -> Result<Self, VcError> {
+        Self::from_bytes(bytes)
+    }
+}
+
+impl TryFrom<&[u8]> for VerifyingKey {
+    type Error = VcError;
+    fn try_from(bytes: &[u8]) -> Result<Self, VcError> {
+        Self::from_bytes(bytes)
+    }
+}
+
+// Redact the secret in Debug output so it can't leak into logs.
+impl fmt::Debug for SigningKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SigningKey([REDACTED])")
+    }
+}
+
+/// An Ed25519 key pair produced by [generate_keypair].
+#[derive(Clone)]
+pub struct KeyPair {
+    /// The private key used to sign credentials.
+    pub signing_key: SigningKey,
+    /// The public key used to verify credentials.
+    pub verifying_key: VerifyingKey,
+}
+
+/// Generate a new Ed25519 [KeyPair].
+pub fn generate_keypair() -> KeyPair {
     let mut csprng = OsRng;
-    let signing_key = SigningKey::generate(&mut csprng);
-    let verifying_key: VerifyingKey = signing_key.verifying_key();
+    let signing_key = DalekSigningKey::generate(&mut csprng);
+    let verifying_key = signing_key.verifying_key();
 
-    let signing_key_bytes = signing_key.to_bytes();
-
-    let verifying_key_bytes = verifying_key.to_bytes();
-
-    (signing_key_bytes, verifying_key_bytes)
+    KeyPair {
+        signing_key: SigningKey(signing_key.to_bytes()),
+        verifying_key: VerifyingKey(verifying_key.to_bytes()),
+    }
 }

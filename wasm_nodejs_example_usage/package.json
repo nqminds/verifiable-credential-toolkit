@@ -2,11 +2,17 @@
   "name": "wasm_node_js_example_usage",
   "version": "1.0.0",
   "type": "module",
-  "description": "",
-  "main": "index.js",
+  "description": "Node.js example exercising the full verifiable-credential-toolkit WASM API",
+  "main": "index.ts",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "cargo build --target wasm32-unknown-unknown --release --manifest-path ../Cargo.toml && wasm-bindgen --target nodejs --out-dir pkg ../target/wasm32-unknown-unknown/release/verifiable_credential_toolkit.wasm && echo '{\"type\":\"commonjs\"}' > pkg/package.json",
+    "start": "node index.ts",
+    "typecheck": "tsc --noEmit"
   },
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^25.9.2",
+    "typescript": "^5"
+  }
 }

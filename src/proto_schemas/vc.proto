@@ -1,0 +1,99 @@
+syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+// Typed schema for verifiable credentials.
+//
+// Most fields are concrete protobuf types. The fields whose JSON shape is genuinely
+// open — dynamic objects (`credentialSubject`) and spec-level string-or-object
+// polymorphism (`issuer`, `name`, `description`, `holder`) — are carried as `string`
+// fields holding the field's exact JSON text. They were once `google.protobuf.Value`,
+// but `Value`'s only numeric type is an IEEE-754 double, so it silently turned every
+// integer into a float and rounded integers beyond 2^53; storing the JSON text instead
+// makes the round-trip lossless. The Protobuf codec serializes these to/from JSON text
+// (see bindings/protobuf.rs).
+//
+// On the Rust side, several list-valued fields use serde's `OneOrMany`, which
+// serializes a single-element list as a bare scalar. Protobuf's canonical JSON
+// mapping requires arrays for `repeated` fields, so the Protobuf codec coerces
+// those scalars to single-element arrays before encoding (see bindings/protobuf.rs).
+
+/// Mirrors Rust UnsignedVerifiableCredential JSON shape.
+message UnsignedVerifiableCredential {
+  repeated string context = 1 [json_name = "@context"];
+  optional string id = 2 [json_name = "id"];
+
+  // OneOrMany<String> in Rust ("type": "x" | ["x", ...])
+  repeated string type = 3 [json_name = "type"];
+
+  // LanguageValue in Rust (string | object), stored as its exact JSON text.
+  optional string name = 4 [json_name = "name"];
+  optional string description = 5 [json_name = "description"];
+
+  // Issuer in Rust (string | object), stored as its exact JSON text.
+  string issuer = 6 [json_name = "issuer"];
+
+  // serde_json::Value in Rust (arbitrary JSON object), stored as its exact JSON text.
+  string credential_subject = 7 [json_name = "credentialSubject"];
+
+  google.protobuf.Timestamp valid_from = 8 [json_name = "validFrom"];
+  google.protobuf.Timestamp valid_until = 9 [json_name = "validUntil"];
+
+  Status credential_status = 10 [json_name = "credentialStatus"];
+
+  // OneOrMany<CredentialSchema> in Rust (object | [object, ...])
+  repeated CredentialSchema credential_schema = 11 [json_name = "credentialSchema"];
+}
+
+/// Mirrors Rust VerifiableCredential with #[serde(flatten)] + proof.
+message VerifiableCredential {
+  repeated string context = 1 [json_name = "@context"];
+  optional string id = 2 [json_name = "id"];
+
+  repeated string type = 3 [json_name = "type"];
+  optional string name = 4 [json_name = "name"];
+  optional string description = 5 [json_name = "description"];
+  string issuer = 6 [json_name = "issuer"];
+  string credential_subject = 7 [json_name = "credentialSubject"];
+  google.protobuf.Timestamp valid_from = 8 [json_name = "validFrom"];
+  google.protobuf.Timestamp valid_until = 9 [json_name = "validUntil"];
+  Status credential_status = 10 [json_name = "credentialStatus"];
+  repeated CredentialSchema credential_schema = 11 [json_name = "credentialSchema"];
+
+  Proof proof = 12 [json_name = "proof"];
+}
+
+/// Mirrors Rust Status.
+message Status {
+  optional string id = 1 [json_name = "id"];
+
+  // OneOrMany<String> in Rust ("type": "x" | ["x", ...])
+  repeated string type = 2 [json_name = "type"];
+}
+
+/// Mirrors Rust CredentialSchema object.
+message CredentialSchema {
+  string id = 1 [json_name = "id"];
+  string type = 2 [json_name = "type"];
+}
+
+/// Mirrors Rust Proof.
+message Proof {
+  optional string id = 1 [json_name = "id"];
+  string type = 2 [json_name = "type"];
+  string proof_purpose = 3 [json_name = "proofPurpose"];
+  optional string verification_method = 4 [json_name = "verificationMethod"];
+  optional string cryptosuite = 5 [json_name = "cryptosuite"];
+  google.protobuf.Timestamp created = 6 [json_name = "created"];
+  google.protobuf.Timestamp expires = 7 [json_name = "expires"];
+
+  // OneOrMany<String> in Rust
+  repeated string domain = 8 [json_name = "domain"];
+
+  optional string challenge = 9 [json_name = "challenge"];
+  string proof_value = 10 [json_name = "proofValue"];
+  optional string previous_proof = 11 [json_name = "previousProof"];
+
+  // OneOrMany<String> in Rust
+  repeated string nonce = 12 [json_name = "nonce"];
+}
