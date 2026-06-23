@@ -215,8 +215,8 @@ fn assert_number_fidelity(roundtrip: fn(serde_json::Value) -> serde_json::Value,
         serde_json::json!(42),
         serde_json::json!(0),
         serde_json::json!(-100),
-        serde_json::json!(9007199254740992i64), // 2^53
-        serde_json::json!(9007199254740993i64), // 2^53 + 1, not f64-representable
+        serde_json::json!(9007199254740992i64),     // 2^53
+        serde_json::json!(9007199254740993i64),     // 2^53 + 1, not f64-representable
         serde_json::json!(18446744073709551615u64), // u64::MAX
         serde_json::json!(-9223372036854775808i64), // i64::MIN
         serde_json::json!(1.23456),
@@ -253,7 +253,10 @@ fn cbor_preserves_all_numbers_exactly() {
 fn protobuf_keeps_integers_as_integers() {
     let after = protobuf_roundtrip_subject_value(serde_json::json!(42));
     assert_eq!(after, serde_json::json!(42));
-    assert!(after.is_i64(), "integer must round-trip as an integer, got {after}");
+    assert!(
+        after.is_i64(),
+        "integer must round-trip as an integer, got {after}"
+    );
     assert!(!after.is_f64());
 }
 
@@ -331,8 +334,7 @@ fn protobuf_full_credential_signs_and_verifies() {
         serde_json::from_value(kitchen_sink_unsigned_json()).expect("kitchen-sink should parse");
     let unsigned_bytes = encode_unsigned_vc_to_protobuf(&vc).expect("encode failed");
 
-    let signed_bytes =
-        sign_protobuf_vc(&unsigned_bytes, &private_key).expect("signing failed");
+    let signed_bytes = sign_protobuf_vc(&unsigned_bytes, &private_key).expect("signing failed");
     verify_protobuf_vc(&signed_bytes, &public_key).expect("verification failed");
 
     let decoded = Protobuf::decode_signed(&signed_bytes).expect("decode failed");
@@ -392,7 +394,10 @@ fn codecs_preserve_array_credential_subject() {
     assert_eq!(Protobuf::decode_unsigned(&pb).expect("protobuf decode"), vc);
 
     let cbor = to_vec(&vc).expect("cbor encode");
-    assert_eq!(decode_unsigned_vc_from_cbor(&cbor).expect("cbor decode"), vc);
+    assert_eq!(
+        decode_unsigned_vc_from_cbor(&cbor).expect("cbor decode"),
+        vc
+    );
 }
 
 /// A `null` nested inside `credentialSubject` survives the Protobuf round-trip — the
@@ -438,12 +443,18 @@ fn signature_is_independent_of_codec() {
     // Protobuf transport.
     let pb = encode_signed_vc_to_protobuf(&signed).expect("protobuf encode failed");
     verify_protobuf_vc(&pb, &public_key).expect("protobuf verification failed");
-    assert_eq!(Protobuf::decode_signed(&pb).expect("protobuf decode"), signed);
+    assert_eq!(
+        Protobuf::decode_signed(&pb).expect("protobuf decode"),
+        signed
+    );
 
     // CBOR transport.
     let cbor = encode_signed_vc_to_cbor(&signed).expect("cbor encode failed");
     verify_cbor_vc(&cbor, &public_key).expect("cbor verification failed");
-    assert_eq!(decode_signed_vc_from_cbor(&cbor).expect("cbor decode"), signed);
+    assert_eq!(
+        decode_signed_vc_from_cbor(&cbor).expect("cbor decode"),
+        signed
+    );
 }
 
 /// Regression: an object-form `issuer` carrying several extra properties must sign and
