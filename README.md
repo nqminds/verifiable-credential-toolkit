@@ -120,7 +120,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-verifiable-credential-toolkit = "0.5"
+verifiable-credential-toolkit = "0.6"
 ```
 
 Or install directly from GitHub:
@@ -239,6 +239,12 @@ This toolkit uses **Ed25519**, a fast and widely-supported digital signature alg
 - **Public key** (verifying key): 32 bytes. Share this freely. Used by anyone to verify a credential's authenticity.
 
 Keys are stored as raw binary files (not PEM/DER). The CLI tools generate files named `{timestamp}.priv` and `{timestamp}.pub`.
+
+### Canonical signing
+
+The signature is computed over the credential serialized with **JCS (JSON Canonicalization Scheme, [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785))**, as used by the `eddsa-jcs-2022` cryptosuite. Canonicalization sorts object keys and normalizes number formatting, so the signed bytes are independent of field ordering. This means a signature stays valid across a serialize/deserialize round-trip and across encodings (JSON, CBOR, Protobuf) — the proof is over the credential's canonical form, not the wire bytes. The emitted proof is a `DataIntegrityProof` with `cryptosuite: "eddsa-jcs-2022"`.
+
+> **Compatibility note:** signatures are not interchangeable with pre-0.6 releases, which signed over non-canonical JSON. Credentials issued by 0.5.x must be re-signed.
 
 ---
 
@@ -377,7 +383,7 @@ let mut signed_vc = unsigned_vc.sign(&signing_key).unwrap();
 // Builder pattern
 signed_vc.proof = signed_vc.proof
     .set_verification_method("did:example:issuer#key-1".to_string())
-    .set_crypto_suite("eddsa-rdfc-2022".to_string())
+    .set_crypto_suite("eddsa-jcs-2022".to_string())
     .set_created(Utc::now())
     .set_expires(Utc::now() + Duration::days(365))
     .set_domain(vec!["https://example.com".to_string()])
