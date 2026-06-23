@@ -266,6 +266,10 @@ pub struct Proof {
     pub nonce: Option<Vec<String>>,
 }
 
+/// The W3C Data Integrity cryptosuite this library signs with and can verify. As more
+/// suites are added (e.g. `ecdsa-jcs-2019`), this becomes the dispatch key in `verify()`.
+pub(crate) const EDDSA_JCS_2022_CRYPTOSUITE: &str = "eddsa-jcs-2022";
+
 impl Proof {
     /// Construct a default EdDSA data-integrity proof carrying the given base64-encoded
     /// `proofValue`. Uses the `eddsa-jcs-2022` cryptosuite, matching the JCS (RFC 8785)
@@ -276,7 +280,7 @@ impl Proof {
             proof_type: "DataIntegrityProof".to_string(),
             proof_purpose: "assertionMethod".to_string(),
             verification_method: None,
-            cryptosuite: Some("eddsa-jcs-2022".to_string()),
+            cryptosuite: Some(EDDSA_JCS_2022_CRYPTOSUITE.to_string()),
             created: None,
             expires: None,
             domain: None,
@@ -488,6 +492,18 @@ impl VerifiableCredential {
         if let Some(valid_until) = self.unsigned.valid_until {
             if now > valid_until {
                 return Err(VcError::Expired);
+            }
+        }
+
+        // Dispatch on the proof's cryptosuite. Only eddsa-jcs-2022 is implemented today;
+        // reject any other suite with a clear error rather than silently applying Ed25519
+        // to a signature produced by a different algorithm.
+        match self.proof.cryptosuite.as_deref() {
+            Some(EDDSA_JCS_2022_CRYPTOSUITE) => {}
+            other => {
+                return Err(VcError::UnsupportedCryptosuite(
+                    other.unwrap_or("(none)").to_string(),
+                ))
             }
         }
 

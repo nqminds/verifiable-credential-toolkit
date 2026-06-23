@@ -652,6 +652,31 @@ mod tests {
         ));
     }
 
+    /// A proof naming a cryptosuite we don't implement is rejected with a clear
+    /// `UnsupportedCryptosuite` error, rather than silently attempting Ed25519
+    /// verification against a signature from another algorithm.
+    #[test]
+    fn verify_rejects_unsupported_cryptosuite() {
+        let vc: VerifiableCredential = serde_json::from_value(serde_json::json!({
+            "@context": ["https://www.w3.org/ns/credentials/v2"],
+            "type": ["VerifiableCredential"],
+            "issuer": "https://example.com/",
+            "credentialSubject": { "id": "did:example:subject" },
+            "proof": {
+                "type": "DataIntegrityProof",
+                "cryptosuite": "ecdsa-jcs-2019",
+                "proofPurpose": "assertionMethod",
+                "proofValue": "z2DeadBeefNotEvenCheckedBecauseTheSuiteIsRejectedFirst"
+            }
+        }))
+        .expect("VC should deserialize");
+
+        assert!(matches!(
+            vc.verify(&verifying_key()),
+            Err(VcError::UnsupportedCryptosuite(suite)) if suite == "ecdsa-jcs-2019"
+        ));
+    }
+
     /// Regression: `Holder::Url` must serialize as a bare string (untagged), not
     /// `{"Url": "..."}`, and round-trip.
     #[test]

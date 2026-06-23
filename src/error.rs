@@ -60,4 +60,9 @@ pub enum VcError {
     /// encode a credential. Carries the underlying format-specific error.
     #[error("codec error: {0}")]
     Codec(#[source] Box<dyn std::error::Error + Send + Sync>),
+
+    /// The proof's `cryptosuite` is not one this library can verify. Carries the
+    /// unsupported cryptosuite identifier (or a placeholder when none was present).
+    #[error("unsupported proof cryptosuite: {0}")]
+    UnsupportedCryptosuite(String),
 }
