@@ -44,17 +44,27 @@ pub enum VcError {
     #[error("failed to decode proofValue from base64: {0}")]
     ProofDecode(#[from] base64::DecodeError),
 
-    /// The decoded `proofValue` was not a well-formed Ed25519 signature.
-    #[error("malformed signature in proof")]
-    MalformedSignature(#[source] ed25519_dalek::SignatureError),
+    /// The decoded `proofValue` was not a well-formed signature for the proof's algorithm
+    /// (e.g. wrong length).
+    #[error("malformed signature in proof: {0}")]
+    MalformedSignature(String),
 
-    /// The supplied public key bytes were not a valid Ed25519 verifying key.
-    #[error("invalid public key")]
-    InvalidPublicKey(#[source] ed25519_dalek::SignatureError),
+    /// The supplied public key bytes were not a valid key for the expected algorithm.
+    #[error("invalid public key: {0}")]
+    InvalidPublicKey(String),
+
+    /// A key could not be decoded, or its length did not match the algorithm.
+    #[error("failed to decode key: {0}")]
+    KeyDecode(String),
+
+    /// The proof's `cryptosuite` (or the requested algorithm) is not one this library
+    /// can sign or verify.
+    #[error("unsupported cryptosuite: {0}")]
+    UnsupportedCryptosuite(String),
 
     /// The signature did not verify against the credential and public key.
     #[error("signature verification failed")]
-    SignatureVerificationFailed(#[source] ed25519_dalek::SignatureError),
+    SignatureVerificationFailed,
 
     /// A serialization-format codec (e.g. CBOR or Protobuf) failed to decode or
     /// encode a credential. Carries the underlying format-specific error.

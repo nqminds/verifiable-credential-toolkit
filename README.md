@@ -1,6 +1,6 @@
 # Verifiable Credential Toolkit
 
-A Rust library (with WASM/JavaScript bindings) for creating, signing, and verifying [W3C Verifiable Credentials](https://www.w3.org/TR/vc-data-model-2.0/). It uses Ed25519 digital signatures to ensure credentials are tamper-proof and can be independently verified.
+A Rust library (with WASM/JavaScript bindings) for creating, signing, and verifying [W3C Verifiable Credentials](https://www.w3.org/TR/vc-data-model-2.0/). It signs with Ed25519 or post-quantum ML-DSA (FIPS 204) to ensure credentials are tamper-proof and can be independently verified.
 
 ## Table of Contents
 
@@ -231,18 +231,36 @@ A Verifiable Credential is a JSON object with this structure:
 }
 ```
 
-### Ed25519 Keys
+### Signature algorithms
 
-This toolkit uses **Ed25519**, a fast and widely-supported digital signature algorithm. Keys are compact (32 bytes each) and signatures are 64 bytes.
+The toolkit signs and verifies with these algorithms, selected via the [`Algorithm`] enum:
 
-- **Private key** (signing key): 32 bytes. Keep this secret. Used by the issuer to sign credentials.
-- **Public key** (verifying key): 32 bytes. Share this freely. Used by anyone to verify a credential's authenticity.
+| Algorithm | `Algorithm` variant | Private key | Public key | `cryptosuite` |
+|---|---|---:|---:|---|
+| Ed25519 (EdDSA) | `Ed25519` | 32 | 32 | `eddsa-jcs-2022` |
+| ML-DSA-44 (FIPS 204, cat. 2) | `MlDsa44` | 2560 | 1312 | `mldsa44-jcs-2025` |
+| ML-DSA-65 (FIPS 204, cat. 3) | `MlDsa65` | 4032 | 1952 | `mldsa65-jcs-2025` |
+| ML-DSA-87 (FIPS 204, cat. 5) | `MlDsa87` | 4896 | 2592 | `mldsa87-jcs-2025` |
 
-Keys are stored as raw binary files (not PEM/DER). The CLI tools generate files named `{timestamp}.priv` and `{timestamp}.pub`.
+ML-DSA (the NIST post-quantum signature standard) is provided via the `ml-dsa` crate. Keys are raw FIPS 204 byte strings; generate a pair with `generate_keypair_bytes(Algorithm)`.
+
+```rust
+let (private_key, public_key) = generate_keypair_bytes(Algorithm::MlDsa65);
+let signed = unsigned.sign_with_algorithm(Algorithm::MlDsa65, &private_key)?;
+signed.verify_auto(&public_key)?;            // reads the algorithm from proof.cryptosuite
+```
+
+`verify_auto` dispatches on the proof's `cryptosuite`; `verify_with_algorithm` takes an explicit algorithm; `verify` is the Ed25519-typed convenience wrapper. Ed25519 keys can still be loaded as raw 32-byte files (`{timestamp}.priv` / `.pub` from the CLI tools).
+
+> ⚠️ **Provisional ML-DSA cryptosuite identifiers.** The W3C `vc-di-mldsa` cryptosuite is still a Working Draft with no finalized identifier, multikey codec, or canonicalization choice. The `mldsa{44,65,87}-jcs-2025` strings above are a **bilateral convention** for closed deployments (e.g. NATO IC 2026 partners) — signing and verifying parties must agree on them out of band and document them; they are not interoperable with arbitrary third-party verifiers until the standard finalizes.
+
+### Bring-your-own / external signatures
+
+If you compute a signature outside the crate (e.g. in an HSM), call [`signing_payload`] to get the exact JCS bytes to sign, then wrap the result with `Proof::new_data_integrity(cryptosuite, base64_signature)` (or `Proof::set_proof_value`) and `VerifiableCredential::from_parts(unsigned, proof)`. The `proofValue` is the base64-encoded raw signature.
 
 ### Canonical signing
 
-The signature is computed over the credential serialized with **JCS (JSON Canonicalization Scheme, [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785))**, as used by the `eddsa-jcs-2022` cryptosuite. Canonicalization sorts object keys and normalizes number formatting, so the signed bytes are independent of field ordering. This means a signature stays valid across a serialize/deserialize round-trip and across encodings (JSON, CBOR, Protobuf) — the proof is over the credential's canonical form, not the wire bytes. The emitted proof is a `DataIntegrityProof` with `cryptosuite: "eddsa-jcs-2022"`.
+The signature is computed over the credential serialized with **JCS (JSON Canonicalization Scheme, [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785))**, used by every cryptosuite above. Canonicalization sorts object keys and normalizes number formatting, so the signed bytes are independent of field ordering. This means a signature stays valid across a serialize/deserialize round-trip and across encodings (JSON, CBOR, Protobuf) — the proof is over the credential's canonical form, not the wire bytes. The emitted proof is a `DataIntegrityProof` whose `cryptosuite` matches the signing algorithm.
 
 > **Compatibility note:** signatures are not interchangeable with pre-0.6 releases, which signed over non-canonical JSON. Credentials issued by 0.5.x must be re-signed.
 

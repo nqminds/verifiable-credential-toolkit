@@ -3,9 +3,9 @@ mod tests {
     use chrono::{DateTime, Duration, Utc};
     use url::Url;
     use verifiable_credential_toolkit::{
-        generate_keypair, Holder, HolderObject, Issuer, IssuerObject, SchemaSource, SigningKey,
-        UnsignedVerifiableCredential, VcError, VerifiableCredential, VerifiablePresentation,
-        VerifyingKey,
+        generate_keypair, generate_keypair_bytes, Algorithm, Holder, HolderObject, Issuer,
+        IssuerObject, Proof, SchemaSource, SigningKey, UnsignedVerifiableCredential, VcError,
+        VerifiableCredential, VerifiablePresentation, VerifyingKey,
     };
 
     /// Load the test signing key from disk.
@@ -361,7 +361,7 @@ mod tests {
 
         assert!(matches!(
             verify_result,
-            Err(VcError::SignatureVerificationFailed(_))
+            Err(VcError::SignatureVerificationFailed)
         ));
     }
 
@@ -600,7 +600,7 @@ mod tests {
         let other = generate_keypair();
         assert!(matches!(
             signed_vc.verify(&other.verifying_key),
-            Err(VcError::SignatureVerificationFailed(_))
+            Err(VcError::SignatureVerificationFailed)
         ));
     }
 
@@ -745,5 +745,108 @@ mod tests {
         let back: VerifiableCredential = serde_json::from_str(&json).unwrap();
 
         assert_eq!(signed, back);
+    }
+
+    // --- Multi-algorithm signing (ML-DSA) -------------------------------------
+
+    fn sample_unsigned() -> UnsignedVerifiableCredential {
+        serde_json::from_value(serde_json::json!({
+            "@context": ["https://www.w3.org/ns/credentials/v2"],
+            "type": ["VerifiableCredential"],
+            "issuer": "https://example.com/issuer",
+            "credentialSubject": { "id": "did:example:subject", "n": 42 }
+        }))
+        .expect("sample VC should deserialize")
+    }
+
+    /// Generated keypair → sign_with_algorithm → verify_with_algorithm and verify_auto,
+    /// for every supported algorithm including the three ML-DSA parameter sets.
+    #[test]
+    fn sign_verify_roundtrip_all_algorithms() {
+        for algorithm in [
+            Algorithm::Ed25519,
+            Algorithm::MlDsa44,
+            Algorithm::MlDsa65,
+            Algorithm::MlDsa87,
+        ] {
+            let (private_key, public_key) = generate_keypair_bytes(algorithm);
+
+            let signed = sample_unsigned()
+                .sign_with_algorithm(algorithm, &private_key)
+                .unwrap_or_else(|e| panic!("sign failed for {algorithm:?}: {e}"));
+
+            // The proof records the algorithm's cryptosuite.
+            assert_eq!(
+                serde_json::to_value(&signed).unwrap()["proof"]["cryptosuite"],
+                algorithm.cryptosuite()
+            );
+
+            // Explicit-algorithm verify and cryptosuite-dispatched verify both pass.
+            signed
+                .verify_with_algorithm(algorithm, &public_key)
+                .unwrap_or_else(|e| panic!("verify_with_algorithm failed for {algorithm:?}: {e}"));
+            signed
+                .verify_auto(&public_key)
+                .unwrap_or_else(|e| panic!("verify_auto failed for {algorithm:?}: {e}"));
+        }
+    }
+
+    /// The injection path: take the canonical `signing_payload`, sign it "externally"
+    /// (here: with ML-DSA-65), then wrap the signature with `Proof::new_data_integrity` +
+    /// `set_proof_value` + `VerifiableCredential::from_parts`, and verify. This is what
+    /// unblocks signing with an algorithm computed outside the crate.
+    #[test]
+    fn external_proof_injection_roundtrip() {
+        let (private_key, public_key) = generate_keypair_bytes(Algorithm::MlDsa65);
+        let unsigned = sample_unsigned();
+
+        // Stand-in for an external signer: produce the proofValue over signing_payload.
+        let proof_value = unsigned
+            .clone()
+            .sign_with_algorithm(Algorithm::MlDsa65, &private_key)
+            .expect("sign")
+            .proof
+            .proof_value()
+            .to_string();
+
+        // Inject it into a hand-built proof and assemble the credential.
+        let proof = Proof::new_data_integrity(Algorithm::MlDsa65.cryptosuite(), String::new())
+            .set_proof_value(proof_value);
+        let injected = VerifiableCredential::from_parts(unsigned, proof);
+
+        injected
+            .verify_auto(&public_key)
+            .expect("injected ML-DSA proof should verify");
+    }
+
+    /// A signature made under one algorithm must not verify under another.
+    #[test]
+    fn cross_algorithm_verification_fails() {
+        let (sk_44, _) = generate_keypair_bytes(Algorithm::MlDsa44);
+        let (_, pk_65) = generate_keypair_bytes(Algorithm::MlDsa65);
+
+        let signed = sample_unsigned()
+            .sign_with_algorithm(Algorithm::MlDsa44, &sk_44)
+            .expect("sign");
+
+        // Wrong parameter set / key: must error, not falsely verify.
+        assert!(signed
+            .verify_with_algorithm(Algorithm::MlDsa65, &pk_65)
+            .is_err());
+    }
+
+    /// `verify_auto` rejects a proof whose cryptosuite the toolkit doesn't implement.
+    #[test]
+    fn verify_auto_rejects_unknown_cryptosuite() {
+        let (private_key, public_key) = generate_keypair_bytes(Algorithm::MlDsa65);
+        let mut signed = sample_unsigned()
+            .sign_with_algorithm(Algorithm::MlDsa65, &private_key)
+            .expect("sign");
+        signed.proof = signed.proof.set_crypto_suite("bbs-2023".to_string());
+
+        assert!(matches!(
+            signed.verify_auto(&public_key),
+            Err(VcError::UnsupportedCryptosuite(suite)) if suite == "bbs-2023"
+        ));
     }
 }

@@ -267,16 +267,22 @@ pub struct Proof {
 }
 
 impl Proof {
-    /// Construct a default EdDSA data-integrity proof carrying the given base64-encoded
-    /// `proofValue`. Uses the `eddsa-jcs-2022` cryptosuite, matching the JCS (RFC 8785)
-    /// canonicalization [signing](UnsignedVerifiableCredential::sign) applies.
-    fn new_eddsa_jcs_2022(proof_value: String) -> Self {
+    /// Construct a `DataIntegrityProof` for the given `cryptosuite`, carrying the
+    /// base64-encoded `proof_value`. This is the entry point for wrapping an
+    /// externally-computed signature (e.g. an ML-DSA signature produced out of process):
+    /// build the proof, attach it with [VerifiableCredential::from_parts], and the
+    /// credential serializes like any other.
+    ///
+    /// Defaults `proofPurpose` to `assertionMethod`; chain the `set_*` builders to
+    /// customize. The signature must be over the credential's
+    /// [signing_payload](UnsignedVerifiableCredential::signing_payload).
+    pub fn new_data_integrity(cryptosuite: &str, proof_value: String) -> Self {
         Proof {
             id: None,
             proof_type: "DataIntegrityProof".to_string(),
             proof_purpose: "assertionMethod".to_string(),
             verification_method: None,
-            cryptosuite: Some("eddsa-jcs-2022".to_string()),
+            cryptosuite: Some(cryptosuite.to_string()),
             created: None,
             expires: None,
             domain: None,
@@ -285,6 +291,11 @@ impl Proof {
             previous_proof: None,
             nonce: None,
         }
+    }
+
+    /// The base64-encoded `proofValue` (the raw signature bytes, base64-encoded).
+    pub fn proof_value(&self) -> &str {
+        &self.proof_value
     }
 
     /// Set the ID of the proof
@@ -350,6 +361,13 @@ impl Proof {
     /// Set the nonce of the proof
     pub fn set_nonce(mut self, nonce: Vec<String>) -> Self {
         self.nonce = Some(nonce);
+        self
+    }
+
+    /// Set the base64-encoded `proofValue`. Use this to inject an externally-computed
+    /// signature (e.g. ML-DSA signed out of process) into a proof.
+    pub fn set_proof_value(mut self, proof_value: String) -> Self {
+        self.proof_value = proof_value;
         self
     }
 }
@@ -439,20 +457,53 @@ impl UnsignedVerifiableCredential {
     /// survives a serialize/deserialize round-trip and is portable across
     /// implementations. Without it, the unordered `additional_properties` maps on
     /// `issuer`/`holder` objects would serialize inconsistently and break verification.
-    fn signing_payload(&self) -> Result<Vec<u8>, VcError> {
+    ///
+    /// Exposed so an external signer (e.g. an ML-DSA implementation in another process or
+    /// HSM) can sign exactly these bytes, then wrap the result with
+    /// [Proof::new_data_integrity] / [VerifiableCredential::from_parts].
+    pub fn signing_payload(&self) -> Result<Vec<u8>, VcError> {
         Ok(serde_jcs::to_vec(self)?)
     }
 
     /// Sign the Verifiable Credential with an Ed25519 [SigningKey], producing a
-    /// [VerifiableCredential] with a default proof and a computed `proofValue`.
+    /// [VerifiableCredential] with a default `eddsa-jcs-2022` proof. For other algorithms
+    /// use [sign_with_algorithm](UnsignedVerifiableCredential::sign_with_algorithm).
     ///
     /// This performs no schema validation; call
     /// [validate](UnsignedVerifiableCredential::validate) first if you need it.
     pub fn sign(self, signing_key: &SigningKey) -> Result<VerifiableCredential, VcError> {
-        let dalek_key = DalekSigningKey::from_bytes(&signing_key.0);
+        self.sign_with_algorithm(Algorithm::Ed25519, &signing_key.0)
+    }
+
+    /// Sign with the given [Algorithm] and a raw private key of the matching length
+    /// (Ed25519: 32-byte seed; ML-DSA: the FIPS 204 expanded signing key — 2560 / 4032 /
+    /// 4896 bytes for ML-DSA-44 / 65 / 87). The signature is taken over the JCS-canonical
+    /// credential and stored base64-encoded in a `DataIntegrityProof` whose `cryptosuite`
+    /// is [Algorithm::cryptosuite].
+    ///
+    /// ML-DSA signing is deterministic (FIPS 204 optional variant) with an empty context.
+    pub fn sign_with_algorithm(
+        self,
+        algorithm: Algorithm,
+        private_key: &[u8],
+    ) -> Result<VerifiableCredential, VcError> {
         let message = self.signing_payload()?;
-        let signature = dalek_key.sign(&message);
-        let proof = Proof::new_eddsa_jcs_2022(BASE64_STANDARD.encode(signature.to_bytes()));
+        let signature = match algorithm {
+            Algorithm::Ed25519 => {
+                let array: [u8; 32] = private_key
+                    .try_into()
+                    .map_err(|_| VcError::InvalidPrivateKeyLength)?;
+                DalekSigningKey::from_bytes(&array)
+                    .sign(&message)
+                    .to_bytes()
+                    .to_vec()
+            }
+            Algorithm::MlDsa44 => mldsa_sign::<ml_dsa::MlDsa44>(private_key, &message)?,
+            Algorithm::MlDsa65 => mldsa_sign::<ml_dsa::MlDsa65>(private_key, &message)?,
+            Algorithm::MlDsa87 => mldsa_sign::<ml_dsa::MlDsa87>(private_key, &message)?,
+        };
+        let proof =
+            Proof::new_data_integrity(algorithm.cryptosuite(), BASE64_STANDARD.encode(signature));
 
         Ok(VerifiableCredential {
             unsigned: self,
@@ -462,24 +513,21 @@ impl UnsignedVerifiableCredential {
 }
 
 impl VerifiableCredential {
+    /// Assemble a signed credential from an unsigned credential and a [Proof]. Use this to
+    /// attach an externally-computed proof (see [Proof::new_data_integrity]).
+    pub fn from_parts(unsigned: UnsignedVerifiableCredential, proof: Proof) -> Self {
+        Self { unsigned, proof }
+    }
+
     /// Removes the proof and returns the [UnsignedVerifiableCredential]
     pub fn to_unsigned(self) -> UnsignedVerifiableCredential {
         self.unsigned
     }
 
-    /// Validate the embedded `credentialSubject` against a [SchemaSource].
-    ///
-    /// Call this alongside [verify](VerifiableCredential::verify) when you need
-    /// schema validation, e.g. `vc.validate(&schema)?; vc.verify(key)?`.
-    pub fn validate(&self, schema: &SchemaSource) -> Result<(), VcError> {
-        self.unsigned.validate(schema)
-    }
-
-    /// Verifies the contents of a Verifiable Credential against a [VerifyingKey]
-    pub fn verify(&self, verifying_key: &VerifyingKey) -> Result<(), VcError> {
+    /// Reject the credential if the current time is outside its `validFrom`/`validUntil`
+    /// window. Shared by all verification entry points.
+    fn check_validity_period(&self) -> Result<(), VcError> {
         let now = Utc::now();
-
-        // Check if the current timestamp is within the validity period
         if let Some(valid_from) = self.unsigned.valid_from {
             if now < valid_from {
                 return Err(VcError::NotYetValid);
@@ -490,17 +538,185 @@ impl VerifiableCredential {
                 return Err(VcError::Expired);
             }
         }
+        Ok(())
+    }
+
+    /// Validate the embedded `credentialSubject` against a [SchemaSource].
+    ///
+    /// Call this alongside [verify](VerifiableCredential::verify) when you need
+    /// schema validation, e.g. `vc.validate(&schema)?; vc.verify(key)?`.
+    pub fn validate(&self, schema: &SchemaSource) -> Result<(), VcError> {
+        self.unsigned.validate(schema)
+    }
+
+    /// Verify an **Ed25519** credential against a typed [VerifyingKey]. Checks the validity
+    /// period, that the proof's `cryptosuite` is `eddsa-jcs-2022`, and the signature. For
+    /// other algorithms use [verify_with_algorithm](VerifiableCredential::verify_with_algorithm)
+    /// or [verify_auto](VerifiableCredential::verify_auto).
+    pub fn verify(&self, verifying_key: &VerifyingKey) -> Result<(), VcError> {
+        if let Some(suite) = self.proof.cryptosuite.as_deref() {
+            if Algorithm::from_cryptosuite(suite) != Some(Algorithm::Ed25519) {
+                return Err(VcError::UnsupportedCryptosuite(suite.to_string()));
+            }
+        }
+        self.verify_with_algorithm(Algorithm::Ed25519, &verifying_key.0)
+    }
+
+    /// Verify with an explicit [Algorithm] and a raw public key of the matching length
+    /// (Ed25519: 32 bytes; ML-DSA: the FIPS 204 public key — 1312 / 1952 / 2592 bytes for
+    /// ML-DSA-44 / 65 / 87). Checks the validity period and the signature; does **not**
+    /// require the proof's `cryptosuite` to match (the caller asserts the algorithm).
+    pub fn verify_with_algorithm(
+        &self,
+        algorithm: Algorithm,
+        public_key: &[u8],
+    ) -> Result<(), VcError> {
+        self.check_validity_period()?;
 
         let message = self.unsigned.signing_payload()?;
-        let proof_bytes = BASE64_STANDARD.decode(&self.proof.proof_value)?;
-        let signature = Signature::from_slice(&proof_bytes).map_err(VcError::MalformedSignature)?;
-        let dalek_key =
-            DalekVerifyingKey::from_bytes(&verifying_key.0).map_err(VcError::InvalidPublicKey)?;
+        let signature = BASE64_STANDARD.decode(&self.proof.proof_value)?;
 
-        dalek_key
-            .verify(&message, &signature)
-            .map_err(VcError::SignatureVerificationFailed)?;
+        match algorithm {
+            Algorithm::Ed25519 => {
+                let array: [u8; 32] = public_key.try_into().map_err(|_| {
+                    VcError::InvalidPublicKey("Ed25519 public key must be 32 bytes".to_string())
+                })?;
+                let sig = Signature::from_slice(&signature)
+                    .map_err(|e| VcError::MalformedSignature(e.to_string()))?;
+                DalekVerifyingKey::from_bytes(&array)
+                    .map_err(|e| VcError::InvalidPublicKey(e.to_string()))?
+                    .verify(&message, &sig)
+                    .map_err(|_| VcError::SignatureVerificationFailed)
+            }
+            Algorithm::MlDsa44 => mldsa_verify::<ml_dsa::MlDsa44>(public_key, &message, &signature),
+            Algorithm::MlDsa65 => mldsa_verify::<ml_dsa::MlDsa65>(public_key, &message, &signature),
+            Algorithm::MlDsa87 => mldsa_verify::<ml_dsa::MlDsa87>(public_key, &message, &signature),
+        }
+    }
+
+    /// Verify by reading the algorithm from the proof's `cryptosuite` and dispatching to
+    /// the right verifier — the caller supplies only the raw public key bytes. Returns
+    /// [VcError::UnsupportedCryptosuite] if the proof names a suite this library can't
+    /// verify.
+    pub fn verify_auto(&self, public_key: &[u8]) -> Result<(), VcError> {
+        let suite = self.proof.cryptosuite.as_deref().unwrap_or("");
+        let algorithm = Algorithm::from_cryptosuite(suite)
+            .ok_or_else(|| VcError::UnsupportedCryptosuite(suite.to_string()))?;
+        self.verify_with_algorithm(algorithm, public_key)
+    }
+}
+
+/// A signature algorithm the toolkit can sign and verify with.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Algorithm {
+    /// Ed25519 (EdDSA). 32-byte keys, `eddsa-jcs-2022` cryptosuite.
+    Ed25519,
+    /// ML-DSA-44 (FIPS 204, security category 2).
+    MlDsa44,
+    /// ML-DSA-65 (FIPS 204, security category 3).
+    MlDsa65,
+    /// ML-DSA-87 (FIPS 204, security category 5).
+    MlDsa87,
+}
+
+impl Algorithm {
+    /// The `cryptosuite` identifier written into a [Proof] signed with this algorithm.
+    ///
+    /// Ed25519 uses the standardized `eddsa-jcs-2022`. The ML-DSA identifiers are
+    /// **provisional and bilateral**: the W3C `vc-di-mldsa` cryptosuite is still a Working
+    /// Draft with no finalized identifier, so these strings are a private convention that
+    /// signing and verifying parties must agree on out of band (see the README). All use
+    /// JCS (RFC 8785) canonicalization.
+    pub fn cryptosuite(self) -> &'static str {
+        match self {
+            Algorithm::Ed25519 => "eddsa-jcs-2022",
+            Algorithm::MlDsa44 => "mldsa44-jcs-2025",
+            Algorithm::MlDsa65 => "mldsa65-jcs-2025",
+            Algorithm::MlDsa87 => "mldsa87-jcs-2025",
+        }
+    }
+
+    /// Map a proof `cryptosuite` identifier back to an [Algorithm], or `None` if the
+    /// identifier is not one this library implements.
+    pub fn from_cryptosuite(cryptosuite: &str) -> Option<Self> {
+        match cryptosuite {
+            "eddsa-jcs-2022" => Some(Algorithm::Ed25519),
+            "mldsa44-jcs-2025" => Some(Algorithm::MlDsa44),
+            "mldsa65-jcs-2025" => Some(Algorithm::MlDsa65),
+            "mldsa87-jcs-2025" => Some(Algorithm::MlDsa87),
+            _ => None,
+        }
+    }
+}
+
+/// Sign `message` with a raw FIPS 204 expanded ML-DSA signing key, returning the raw
+/// signature bytes. Deterministic variant, empty context.
+#[allow(deprecated)] // from_expanded: importing an external expanded key is the intent here
+fn mldsa_sign<P: ml_dsa::MlDsaParams>(sk_bytes: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError> {
+    let encoded = ml_dsa::ExpandedSigningKeyBytes::<P>::try_from(sk_bytes)
+        .map_err(|_| VcError::KeyDecode("ML-DSA signing key has the wrong length".to_string()))?;
+    let signing_key = ml_dsa::ExpandedSigningKey::<P>::from_expanded(&encoded);
+    let signature = signing_key
+        .sign_deterministic(message, b"")
+        .map_err(|_| VcError::KeyDecode("ML-DSA signing failed".to_string()))?;
+    Ok(signature.encode().to_vec())
+}
+
+/// Verify a raw ML-DSA signature over `message` with a raw FIPS 204 public key.
+fn mldsa_verify<P: ml_dsa::MlDsaParams>(
+    pk_bytes: &[u8],
+    message: &[u8],
+    signature: &[u8],
+) -> Result<(), VcError> {
+    let encoded_pk = ml_dsa::EncodedVerifyingKey::<P>::try_from(pk_bytes).map_err(|_| {
+        VcError::InvalidPublicKey("ML-DSA public key has the wrong length".to_string())
+    })?;
+    let verifying_key = ml_dsa::VerifyingKey::<P>::decode(&encoded_pk);
+
+    let encoded_sig = ml_dsa::EncodedSignature::<P>::try_from(signature).map_err(|_| {
+        VcError::MalformedSignature("ML-DSA signature has the wrong length".to_string())
+    })?;
+    let signature = ml_dsa::Signature::<P>::decode(&encoded_sig).ok_or_else(|| {
+        VcError::MalformedSignature("ML-DSA signature failed to decode".to_string())
+    })?;
+
+    if verifying_key.verify_with_context(message, b"", &signature) {
         Ok(())
+    } else {
+        Err(VcError::SignatureVerificationFailed)
+    }
+}
+
+/// Generate an ML-DSA key pair from a fresh random seed, returning
+/// `(expanded_signing_key_bytes, verifying_key_bytes)` in their FIPS 204 encodings.
+#[allow(deprecated)] // to_expanded: we intentionally export the expanded key form
+fn mldsa_generate<P: ml_dsa::MlDsaParams>() -> (Vec<u8>, Vec<u8>) {
+    use rand::RngCore;
+    let mut seed = [0u8; 32];
+    OsRng.fill_bytes(&mut seed);
+    let seed = ml_dsa::B32::try_from(&seed[..]).expect("seed is 32 bytes");
+    let signing_key = ml_dsa::ExpandedSigningKey::<P>::from_seed(&seed);
+    (
+        signing_key.to_expanded().to_vec(),
+        signing_key.verifying_key().encode().to_vec(),
+    )
+}
+
+/// Generate a fresh key pair for `algorithm`, returning `(private_key, public_key)` as
+/// raw bytes suitable for [UnsignedVerifiableCredential::sign_with_algorithm] and
+/// [VerifiableCredential::verify_with_algorithm].
+pub fn generate_keypair_bytes(algorithm: Algorithm) -> (Vec<u8>, Vec<u8>) {
+    match algorithm {
+        Algorithm::Ed25519 => {
+            let signing_key = DalekSigningKey::generate(&mut OsRng);
+            (
+                signing_key.to_bytes().to_vec(),
+                signing_key.verifying_key().to_bytes().to_vec(),
+            )
+        }
+        Algorithm::MlDsa44 => mldsa_generate::<ml_dsa::MlDsa44>(),
+        Algorithm::MlDsa65 => mldsa_generate::<ml_dsa::MlDsa65>(),
+        Algorithm::MlDsa87 => mldsa_generate::<ml_dsa::MlDsa87>(),
     }
 }
 
