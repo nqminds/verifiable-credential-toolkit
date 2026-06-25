@@ -562,3 +562,41 @@ fn mldsa_signature_is_interoperable_across_formats() {
     .expect("re-encode protobuf");
     verify_protobuf_vc_auto(&transcoded, &public_key).expect("verify transcoded");
 }
+
+/// The interop guarantee must hold for a number-heavy, nested `credentialSubject` — the
+/// case where any canonicalization mismatch across formats would surface. Sign such a
+/// credential with ML-DSA via the JSON core, then verify it as CBOR and as Protobuf, and
+/// after a CBOR->Protobuf transcode.
+#[test]
+fn mldsa_interop_preserves_number_heavy_subject() {
+    let (private_key, public_key) = generate_keypair_bytes(Algorithm::MlDsa65);
+
+    let unsigned: UnsignedVerifiableCredential = serde_json::from_value(serde_json::json!({
+        "@context": ["https://www.w3.org/ns/credentials/v2"],
+        "type": ["VerifiableCredential"],
+        "issuer": "https://example.com/issuer",
+        "credentialSubject": {
+            "id": "did:example:subject",
+            "count": 42,
+            "big": 9007199254740993i64,
+            "ratio": 0.25,
+            "nested": { "flag": true, "missing": serde_json::Value::Null, "list": [1, "two", 3.5] }
+        }
+    }))
+    .expect("number-heavy VC should deserialize");
+
+    let signed = unsigned
+        .sign_with_algorithm(Algorithm::MlDsa65, &private_key)
+        .expect("core sign");
+
+    let cbor = encode_signed_vc_to_cbor(&signed).expect("cbor encode");
+    verify_cbor_vc_auto(&cbor, &public_key).expect("verify cbor");
+
+    let protobuf = encode_signed_vc_to_protobuf(&signed).expect("protobuf encode");
+    verify_protobuf_vc_auto(&protobuf, &public_key).expect("verify protobuf");
+
+    let transcoded =
+        encode_signed_vc_to_protobuf(&decode_signed_vc_from_cbor(&cbor).expect("decode cbor"))
+            .expect("re-encode protobuf");
+    verify_protobuf_vc_auto(&transcoded, &public_key).expect("verify transcoded");
+}
