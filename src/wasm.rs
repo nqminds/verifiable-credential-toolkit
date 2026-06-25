@@ -1,7 +1,7 @@
 use crate::bindings::{cbor::Cbor, protobuf::Protobuf, CredentialCodec};
 use crate::UnsignedVerifiableCredential;
 use crate::VerifiableCredential;
-use crate::{SchemaSource, SigningKey, VerifyingKey};
+use crate::{generate_keypair_bytes, Algorithm, SchemaSource, SigningKey, VerifyingKey};
 use js_sys::{Array, Reflect};
 use serde::Serialize;
 use serde_wasm_bindgen::from_value;
@@ -200,7 +200,7 @@ impl KeyPair {
     }
 }
 
-/// Generate a new keypair
+/// Generate a new Ed25519 keypair
 #[wasm_bindgen]
 pub fn generate_keypair() -> KeyPair {
     let keypair = crate::generate_keypair();
@@ -208,6 +208,76 @@ pub fn generate_keypair() -> KeyPair {
         keypair.signing_key.to_bytes().to_vec(),
         keypair.verifying_key.to_bytes().to_vec(),
     )
+}
+
+/// Parse an algorithm label ("Ed25519", "ML-DSA-44", "ML-DSA-65", "ML-DSA-87";
+/// case- and separator-insensitive) into an [Algorithm].
+fn parse_algorithm(label: &str) -> Result<Algorithm, JsError> {
+    match label
+        .to_ascii_lowercase()
+        .replace(['-', '_', ' '], "")
+        .as_str()
+    {
+        "ed25519" => Ok(Algorithm::Ed25519),
+        "mldsa44" => Ok(Algorithm::MlDsa44),
+        "mldsa65" => Ok(Algorithm::MlDsa65),
+        "mldsa87" => Ok(Algorithm::MlDsa87),
+        _ => Err(JsError::new(&format!("unknown algorithm: {label}"))),
+    }
+}
+
+/// Generate a key pair for the given algorithm label, returning raw key bytes
+/// (Ed25519 or ML-DSA-44/65/87 in their FIPS 204 encodings).
+#[wasm_bindgen]
+pub fn generate_keypair_for(algorithm: &str) -> Result<KeyPair, JsError> {
+    let (private_key, public_key) = generate_keypair_bytes(parse_algorithm(algorithm)?);
+    Ok(KeyPair::new(private_key, public_key))
+}
+
+/// Sign an unsigned credential (JS object) with the given algorithm and a raw private key
+/// of the matching length (Ed25519: 32 bytes; ML-DSA: the FIPS 204 expanded signing key).
+#[wasm_bindgen]
+pub fn sign_with_algorithm(
+    unsigned_vc: JsValue,
+    algorithm: &str,
+    private_key: &[u8],
+) -> Result<JsValue, JsError> {
+    let unsigned = unsigned_vc_from_js(&unsigned_vc)?;
+    let signed = unsigned
+        .sign_with_algorithm(parse_algorithm(algorithm)?, private_key)
+        .map_err(|e| JsError::new(&format!("Signing failed: {e}")))?;
+    Ok(to_js_value(&signed)?)
+}
+
+/// Verify a signed credential (JS object) with an explicit algorithm and a raw public key.
+/// Returns false on any failure.
+#[wasm_bindgen]
+pub fn verify_with_algorithm(
+    signed_vc: JsValue,
+    algorithm: &str,
+    public_key: &[u8],
+) -> Result<bool, JsError> {
+    let vc: VerifiableCredential = from_value(signed_vc).map_err(|e| {
+        JsError::new(&format!(
+            "Failed to deserialize signed verifiable credential: {e}"
+        ))
+    })?;
+    Ok(vc
+        .verify_with_algorithm(parse_algorithm(algorithm)?, public_key)
+        .is_ok())
+}
+
+/// Verify a signed credential (JS object), reading the algorithm from the proof's
+/// `cryptosuite`. The caller supplies only the raw public key bytes. Returns false on any
+/// failure (including an unsupported cryptosuite).
+#[wasm_bindgen]
+pub fn verify_auto(signed_vc: JsValue, public_key: &[u8]) -> Result<bool, JsError> {
+    let vc: VerifiableCredential = from_value(signed_vc).map_err(|e| {
+        JsError::new(&format!(
+            "Failed to deserialize signed verifiable credential: {e}"
+        ))
+    })?;
+    Ok(vc.verify_auto(public_key).is_ok())
 }
 
 // protobuf encoding/decoding functions --------------------------------------------------------

@@ -282,4 +282,30 @@ mod wasm_tests {
 
         assert!(verify_result.is_err());
     }
+
+    /// ML-DSA must work at *runtime* on wasm, not just compile: generate a key pair,
+    /// sign, and verify for every parameter set, executed in the wasm test runner.
+    #[wasm_bindgen_test]
+    fn mldsa_sign_verify_on_wasm() {
+        use verifiable_credential_toolkit::{generate_keypair_bytes, Algorithm};
+
+        let unsigned: UnsignedVerifiableCredential = serde_json::from_value(serde_json::json!({
+            "@context": ["https://www.w3.org/ns/credentials/v2"],
+            "type": ["VerifiableCredential"],
+            "issuer": "https://example.com/issuer",
+            "credentialSubject": { "id": "did:example:subject", "n": 42 }
+        }))
+        .expect("Failed to deserialize JSON");
+
+        for algorithm in [Algorithm::MlDsa44, Algorithm::MlDsa65, Algorithm::MlDsa87] {
+            let (private_key, public_key) = generate_keypair_bytes(algorithm);
+            let signed = unsigned
+                .clone()
+                .sign_with_algorithm(algorithm, &private_key)
+                .expect("ML-DSA signing should work on wasm");
+            signed
+                .verify_auto(&public_key)
+                .expect("ML-DSA verification should work on wasm");
+        }
+    }
 }
