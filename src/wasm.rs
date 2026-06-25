@@ -384,3 +384,50 @@ pub fn verify_cbor_vc(signed_vc_cbor: &[u8], public_key: &[u8]) -> Result<bool, 
         .map(|_| true)
         .map_err(|e| JsError::new(&format!("CBOR verification failed: {}", e)))
 }
+
+// multi-algorithm codec functions ------------------------------------------------------
+
+/// Sign an unsigned CBOR credential with the given algorithm label and raw private key.
+#[wasm_bindgen]
+pub fn sign_cbor_vc_with_algorithm(
+    unsigned_vc_cbor: &[u8],
+    algorithm: &str,
+    private_key: &[u8],
+) -> Result<Vec<u8>, JsError> {
+    crate::bindings::cbor::sign_cbor_vc_with_algorithm(
+        unsigned_vc_cbor,
+        parse_algorithm(algorithm)?,
+        private_key,
+    )
+    .map_err(|e| JsError::new(&format!("CBOR signing failed: {e}")))
+}
+
+/// Verify a signed CBOR credential, reading the algorithm from the proof's `cryptosuite`.
+#[wasm_bindgen]
+pub fn verify_cbor_vc_auto(signed_vc_cbor: &[u8], public_key: &[u8]) -> Result<bool, JsError> {
+    Ok(crate::bindings::cbor::verify_cbor_vc_auto(signed_vc_cbor, public_key).is_ok())
+}
+
+/// Sign an unsigned Protobuf credential with the given algorithm label and raw private key.
+#[wasm_bindgen]
+pub fn sign_protobuf_vc_with_algorithm(
+    unsigned_vc_protobuf: &[u8],
+    algorithm: &str,
+    private_key: &[u8],
+) -> Result<Vec<u8>, JsError> {
+    crate::bindings::protobuf::sign_protobuf_vc_with_algorithm(
+        unsigned_vc_protobuf,
+        parse_algorithm(algorithm)?,
+        private_key,
+    )
+    .map_err(|e| JsError::new(&format!("Protobuf signing failed: {e}")))
+}
+
+/// Verify a signed Protobuf credential, reading the algorithm from the proof's `cryptosuite`.
+#[wasm_bindgen]
+pub fn verify_protobuf_vc_auto(
+    signed_vc_protobuf: &[u8],
+    public_key: &[u8],
+) -> Result<bool, JsError> {
+    Ok(crate::bindings::protobuf::verify_protobuf_vc_auto(signed_vc_protobuf, public_key).is_ok())
+}

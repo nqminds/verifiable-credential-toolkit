@@ -5,16 +5,19 @@ use verifiable_credential_toolkit::{
     bindings::{
         cbor::{
             decode_signed_vc_from_cbor, decode_unsigned_vc_from_cbor, encode_signed_vc_to_cbor,
-            sign_cbor_vc, verify_cbor_vc, Cbor,
+            sign_cbor_vc, sign_cbor_vc_with_algorithm, verify_cbor_vc, verify_cbor_vc_auto,
+            verify_cbor_vc_with_algorithm, Cbor,
         },
         protobuf::{
             decode_signed_vc_from_protobuf, decode_unsigned_vc_from_protobuf,
             encode_signed_vc_to_protobuf, encode_unsigned_vc_to_protobuf, sign_protobuf_vc,
-            verify_protobuf_vc, Protobuf,
+            sign_protobuf_vc_with_algorithm, verify_protobuf_vc, verify_protobuf_vc_auto,
+            verify_protobuf_vc_with_algorithm, Protobuf,
         },
         CredentialCodec,
     },
-    SigningKey, UnsignedVerifiableCredential, VcError, VerifiableCredential, VerifyingKey,
+    generate_keypair_bytes, Algorithm, SigningKey, UnsignedVerifiableCredential, VcError,
+    VerifiableCredential, VerifyingKey,
 };
 
 fn load_private_key() -> SigningKey {
@@ -492,4 +495,70 @@ fn signing_is_stable_for_object_issuer_with_extra_properties() {
         let cbor = encode_signed_vc_to_cbor(&signed).expect("cbor encode failed");
         verify_cbor_vc(&cbor, &public_key).expect("cbor verification after round-trip");
     }
+}
+
+// --- ML-DSA over CBOR and Protobuf, and cross-format interop ------------------
+
+/// Every supported algorithm signs and verifies through both codecs (verify_auto reads
+/// the cryptosuite; verify_with_algorithm is explicit).
+#[test]
+fn all_algorithms_sign_verify_via_cbor_and_protobuf() {
+    for algorithm in [
+        Algorithm::Ed25519,
+        Algorithm::MlDsa44,
+        Algorithm::MlDsa65,
+        Algorithm::MlDsa87,
+    ] {
+        let (private_key, public_key) = generate_keypair_bytes(algorithm);
+
+        // CBOR
+        let unsigned_cbor = to_vec(&sample_unsigned_vc()).expect("cbor encode unsigned");
+        let signed_cbor = sign_cbor_vc_with_algorithm(&unsigned_cbor, algorithm, &private_key)
+            .unwrap_or_else(|e| panic!("cbor sign failed for {algorithm:?}: {e}"));
+        verify_cbor_vc_auto(&signed_cbor, &public_key)
+            .unwrap_or_else(|e| panic!("cbor verify_auto failed for {algorithm:?}: {e}"));
+        verify_cbor_vc_with_algorithm(&signed_cbor, algorithm, &public_key)
+            .unwrap_or_else(|e| panic!("cbor verify_with_algorithm failed for {algorithm:?}: {e}"));
+
+        // Protobuf
+        let unsigned_pb = encode_unsigned_vc_to_protobuf(&sample_unsigned_vc())
+            .expect("protobuf encode unsigned");
+        let signed_pb = sign_protobuf_vc_with_algorithm(&unsigned_pb, algorithm, &private_key)
+            .unwrap_or_else(|e| panic!("protobuf sign failed for {algorithm:?}: {e}"));
+        verify_protobuf_vc_auto(&signed_pb, &public_key)
+            .unwrap_or_else(|e| panic!("protobuf verify_auto failed for {algorithm:?}: {e}"));
+        verify_protobuf_vc_with_algorithm(&signed_pb, algorithm, &public_key).unwrap_or_else(|e| {
+            panic!("protobuf verify_with_algorithm failed for {algorithm:?}: {e}")
+        });
+    }
+}
+
+/// The signature is over the format-independent JCS canonical form, so an ML-DSA
+/// credential signed in one representation verifies in every other — the interop
+/// guarantee. Sign via the JSON core, then verify the same credential as CBOR and as
+/// Protobuf; and sign via CBOR, then verify after transcoding to Protobuf.
+#[test]
+fn mldsa_signature_is_interoperable_across_formats() {
+    let (private_key, public_key) = generate_keypair_bytes(Algorithm::MlDsa65);
+
+    // Signed once via the core JSON path.
+    let signed = sample_unsigned_vc()
+        .sign_with_algorithm(Algorithm::MlDsa65, &private_key)
+        .expect("core sign");
+
+    // Verifies as CBOR and as Protobuf.
+    let cbor = encode_signed_vc_to_cbor(&signed).expect("cbor encode");
+    verify_cbor_vc_auto(&cbor, &public_key).expect("verify cbor");
+    let protobuf = encode_signed_vc_to_protobuf(&signed).expect("protobuf encode");
+    verify_protobuf_vc_auto(&protobuf, &public_key).expect("verify protobuf");
+
+    // Signed via the CBOR pipeline, transcoded to Protobuf, still verifies.
+    let unsigned_cbor = to_vec(&sample_unsigned_vc()).expect("cbor encode unsigned");
+    let signed_cbor = sign_cbor_vc_with_algorithm(&unsigned_cbor, Algorithm::MlDsa65, &private_key)
+        .expect("cbor sign");
+    let transcoded = encode_signed_vc_to_protobuf(
+        &decode_signed_vc_from_cbor(&signed_cbor).expect("decode cbor"),
+    )
+    .expect("re-encode protobuf");
+    verify_protobuf_vc_auto(&transcoded, &public_key).expect("verify transcoded");
 }

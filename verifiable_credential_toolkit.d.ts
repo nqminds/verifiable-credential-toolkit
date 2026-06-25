@@ -176,5 +176,27 @@ export function verify_protobuf_vc(
   public_key: VerifyingKey
 ): boolean;
 
+// Multi-algorithm CBOR / Protobuf: sign with any supported cryptosuite (Ed25519 or
+// ML-DSA-44/65/87) and verify by reading the algorithm from the proof's cryptosuite.
+// Signatures are interoperable across JSON, CBOR, and Protobuf.
+export function sign_cbor_vc_with_algorithm(
+  unsigned_vc_cbor: Uint8Array,
+  algorithm: AlgorithmLabel,
+  private_key: Uint8Array
+): Uint8Array;
+export function verify_cbor_vc_auto(
+  signed_vc_cbor: Uint8Array,
+  public_key: Uint8Array
+): boolean;
+export function sign_protobuf_vc_with_algorithm(
+  unsigned_vc_protobuf: Uint8Array,
+  algorithm: AlgorithmLabel,
+  private_key: Uint8Array
+): Uint8Array;
+export function verify_protobuf_vc_auto(
+  signed_vc_protobuf: Uint8Array,
+  public_key: Uint8Array
+): boolean;
+
 export function normalize_object(input: any): any;
 export function normalize_and_stringify(input: any): string;

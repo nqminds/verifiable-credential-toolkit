@@ -1,9 +1,12 @@
-use crate::bindings::{sign_via, verify_via, CredentialCodec};
+use crate::bindings::{
+    sign_via, sign_with_algorithm_via, verify_auto_via, verify_via, verify_with_algorithm_via,
+    CredentialCodec,
+};
 use crate::proto_schemas::vc::UnsignedVerifiableCredential as ProtobufUnsignedVerifiableCredential;
 use crate::proto_schemas::vc::VerifiableCredential as ProtobufVerifiableCredential;
 use crate::UnsignedVerifiableCredential;
 use crate::VerifiableCredential;
-use crate::{SigningKey, VcError, VerifyingKey};
+use crate::{Algorithm, SigningKey, VcError, VerifyingKey};
 use protobuf::Message;
 use protobuf_json_mapping::{
     parse_from_str as json_to_protobuf, print_to_string as protobuf_to_json,
@@ -197,6 +200,34 @@ pub fn verify_protobuf_vc(
     verifying_key: &VerifyingKey,
 ) -> Result<(), VcError> {
     verify_via::<Protobuf>(signed_vc_protobuf, verifying_key)
+}
+
+/// Decode unsigned VC protobuf, sign with the given [Algorithm] + raw private key,
+/// re-encode as protobuf. Supports every cryptosuite (Ed25519, ML-DSA-44/65/87).
+pub fn sign_protobuf_vc_with_algorithm(
+    unsigned_vc_protobuf: &[u8],
+    algorithm: Algorithm,
+    private_key: &[u8],
+) -> Result<Vec<u8>, VcError> {
+    sign_with_algorithm_via::<Protobuf>(unsigned_vc_protobuf, algorithm, private_key)
+}
+
+/// Decode signed VC protobuf and verify with an explicit [Algorithm] + raw public key.
+pub fn verify_protobuf_vc_with_algorithm(
+    signed_vc_protobuf: &[u8],
+    algorithm: Algorithm,
+    public_key: &[u8],
+) -> Result<(), VcError> {
+    verify_with_algorithm_via::<Protobuf>(signed_vc_protobuf, algorithm, public_key)
+}
+
+/// Decode signed VC protobuf and verify, reading the algorithm from the proof's
+/// `cryptosuite`. The caller supplies only the raw public key bytes.
+pub fn verify_protobuf_vc_auto(
+    signed_vc_protobuf: &[u8],
+    public_key: &[u8],
+) -> Result<(), VcError> {
+    verify_auto_via::<Protobuf>(signed_vc_protobuf, public_key)
 }
 
 #[cfg(test)]

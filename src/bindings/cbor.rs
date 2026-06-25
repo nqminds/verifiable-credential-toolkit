@@ -1,7 +1,10 @@
-use crate::bindings::{sign_via, verify_via, CredentialCodec};
+use crate::bindings::{
+    sign_via, sign_with_algorithm_via, verify_auto_via, verify_via, verify_with_algorithm_via,
+    CredentialCodec,
+};
 use crate::UnsignedVerifiableCredential;
 use crate::VerifiableCredential;
-use crate::{SigningKey, VcError, VerifyingKey};
+use crate::{Algorithm, SigningKey, VcError, VerifyingKey};
 use c2pa_cbor::{from_slice, to_vec};
 
 /// The CBOR serialization format.
@@ -53,6 +56,31 @@ pub fn sign_cbor_vc(unsigned_vc_cbor: &[u8], signing_key: &SigningKey) -> Result
 /// Convenience wrapper: decode signed VC cbor and verify its signature.
 pub fn verify_cbor_vc(signed_vc_cbor: &[u8], verifying_key: &VerifyingKey) -> Result<(), VcError> {
     verify_via::<Cbor>(signed_vc_cbor, verifying_key)
+}
+
+/// Decode unsigned VC cbor, sign with the given [Algorithm] + raw private key, re-encode
+/// as cbor. Supports every cryptosuite (Ed25519, ML-DSA-44/65/87).
+pub fn sign_cbor_vc_with_algorithm(
+    unsigned_vc_cbor: &[u8],
+    algorithm: Algorithm,
+    private_key: &[u8],
+) -> Result<Vec<u8>, VcError> {
+    sign_with_algorithm_via::<Cbor>(unsigned_vc_cbor, algorithm, private_key)
+}
+
+/// Decode signed VC cbor and verify with an explicit [Algorithm] + raw public key.
+pub fn verify_cbor_vc_with_algorithm(
+    signed_vc_cbor: &[u8],
+    algorithm: Algorithm,
+    public_key: &[u8],
+) -> Result<(), VcError> {
+    verify_with_algorithm_via::<Cbor>(signed_vc_cbor, algorithm, public_key)
+}
+
+/// Decode signed VC cbor and verify, reading the algorithm from the proof's
+/// `cryptosuite`. The caller supplies only the raw public key bytes.
+pub fn verify_cbor_vc_auto(signed_vc_cbor: &[u8], public_key: &[u8]) -> Result<(), VcError> {
+    verify_auto_via::<Cbor>(signed_vc_cbor, public_key)
 }
 
 #[cfg(test)]
