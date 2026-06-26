@@ -40,9 +40,9 @@ pub enum VcError {
     #[error("the credential has expired (validUntil check failed)")]
     Expired,
 
-    /// The `proofValue` was not valid base64.
-    #[error("failed to decode proofValue from base64: {0}")]
-    ProofDecode(#[from] base64::DecodeError),
+    /// The `proofValue` could not be decoded from its multibase representation.
+    #[error("failed to decode proofValue: {0}")]
+    ProofDecode(String),
 
     /// The decoded `proofValue` was not a well-formed signature for the proof's algorithm
     /// (e.g. wrong length).

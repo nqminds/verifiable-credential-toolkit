@@ -1,8 +1,8 @@
-use base64::{prelude::BASE64_STANDARD, Engine};
 use chrono::{DateTime, Utc};
 use ed25519_dalek::{
     Signature, Signer, SigningKey as DalekSigningKey, Verifier, VerifyingKey as DalekVerifyingKey,
 };
+use multibase::Base;
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -502,8 +502,10 @@ impl UnsignedVerifiableCredential {
             Algorithm::MlDsa65 => mldsa_sign::<ml_dsa::MlDsa65>(private_key, &message)?,
             Algorithm::MlDsa87 => mldsa_sign::<ml_dsa::MlDsa87>(private_key, &message)?,
         };
-        let proof =
-            Proof::new_data_integrity(algorithm.cryptosuite(), BASE64_STANDARD.encode(signature));
+        let proof = Proof::new_data_integrity(
+            algorithm.cryptosuite(),
+            multibase::encode(Base::Base58Btc, signature),
+        );
 
         Ok(VerifiableCredential {
             unsigned: self,
@@ -574,7 +576,8 @@ impl VerifiableCredential {
         self.check_validity_period()?;
 
         let message = self.unsigned.signing_payload()?;
-        let signature = BASE64_STANDARD.decode(&self.proof.proof_value)?;
+        let (_, signature) = multibase::decode(&self.proof.proof_value)
+            .map_err(|e| VcError::ProofDecode(e.to_string()))?;
 
         match algorithm {
             Algorithm::Ed25519 => {
@@ -650,15 +653,25 @@ impl Algorithm {
 }
 
 /// Sign `message` with a raw FIPS 204 expanded ML-DSA signing key, returning the raw
-/// signature bytes. Deterministic variant, empty context.
+/// signature bytes. Uses the **hedged** (randomized) variant with an empty context, as
+/// recommended by FIPS 204 §3.4 — fresh randomness mitigates fault attacks and bad-RNG
+/// edge cases. Signatures are therefore non-deterministic (still verifiable by anyone).
+///
+/// `from_expanded` does not validate the key and can panic on a malformed (but
+/// correctly-sized) key. The private key is caller-supplied, so the whole sign is run
+/// inside `catch_unwind` and a panic is reported as a [VcError] rather than aborting.
 #[allow(deprecated)] // from_expanded: importing an external expanded key is the intent here
 fn mldsa_sign<P: ml_dsa::MlDsaParams>(sk_bytes: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError> {
     let encoded = ml_dsa::ExpandedSigningKeyBytes::<P>::try_from(sk_bytes)
         .map_err(|_| VcError::KeyDecode("ML-DSA signing key has the wrong length".to_string()))?;
-    let signing_key = ml_dsa::ExpandedSigningKey::<P>::from_expanded(&encoded);
-    let signature = signing_key
-        .sign_deterministic(message, b"")
-        .map_err(|_| VcError::KeyDecode("ML-DSA signing failed".to_string()))?;
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let signing_key = ml_dsa::ExpandedSigningKey::<P>::from_expanded(&encoded);
+        signing_key.sign_randomized(message, b"", &mut getrandom_v04::SysRng)
+    }))
+    .map_err(|_| VcError::KeyDecode("ML-DSA signing key is malformed".to_string()))?;
+
+    let signature = result.map_err(|_| VcError::KeyDecode("ML-DSA signing failed".to_string()))?;
     Ok(signature.encode().to_vec())
 }
 

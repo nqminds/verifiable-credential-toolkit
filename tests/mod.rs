@@ -604,10 +604,10 @@ mod tests {
         ));
     }
 
-    /// A `proofValue` that isn't valid base64 fails at the decode step — a distinct error
-    /// from a well-formed-but-wrong signature.
+    /// A `proofValue` that isn't valid multibase fails at the decode step — a distinct
+    /// error from a well-formed-but-wrong signature.
     #[test]
-    fn verify_rejects_non_base64_proof_value() {
+    fn verify_rejects_undecodable_proof_value() {
         let vc: VerifiableCredential = serde_json::from_value(serde_json::json!({
             "@context": ["https://www.w3.org/ns/credentials/v2"],
             "type": ["VerifiableCredential"],
@@ -617,7 +617,7 @@ mod tests {
                 "type": "DataIntegrityProof",
                 "cryptosuite": "eddsa-jcs-2022",
                 "proofPurpose": "assertionMethod",
-                "proofValue": "not valid base64 !!!"
+                "proofValue": "not valid multibase !!!"
             }
         }))
         .expect("VC should deserialize");
@@ -628,8 +628,9 @@ mod tests {
         ));
     }
 
-    /// A `proofValue` that decodes but isn't a 64-byte Ed25519 signature is rejected as
-    /// malformed, before any verification maths.
+    /// A `proofValue` that decodes (valid multibase) but isn't a 64-byte Ed25519
+    /// signature is rejected as malformed. `z` is the base58btc multibase prefix;
+    /// "1111111111" decodes to ten zero bytes.
     #[test]
     fn verify_rejects_malformed_signature_length() {
         let vc: VerifiableCredential = serde_json::from_value(serde_json::json!({
@@ -641,7 +642,7 @@ mod tests {
                 "type": "DataIntegrityProof",
                 "cryptosuite": "eddsa-jcs-2022",
                 "proofPurpose": "assertionMethod",
-                "proofValue": "AAAA"
+                "proofValue": "z1111111111"
             }
         }))
         .expect("VC should deserialize");
@@ -833,6 +834,27 @@ mod tests {
         assert!(signed
             .verify_with_algorithm(Algorithm::MlDsa65, &pk_65)
             .is_err());
+    }
+
+    /// A tampered credential signed with ML-DSA fails verification (the signature covers
+    /// the canonical content).
+    #[test]
+    fn mldsa_verify_rejects_tampered_payload() {
+        let (private_key, public_key) = generate_keypair_bytes(Algorithm::MlDsa65);
+        let signed = sample_unsigned()
+            .sign_with_algorithm(Algorithm::MlDsa65, &private_key)
+            .expect("sign");
+
+        // Flip a value in the subject after signing.
+        let mut json = serde_json::to_value(&signed).unwrap();
+        json["credentialSubject"]["n"] = serde_json::json!(999);
+        let tampered: VerifiableCredential =
+            serde_json::from_value(json).expect("tampered VC still deserializes");
+
+        assert!(matches!(
+            tampered.verify_auto(&public_key),
+            Err(VcError::SignatureVerificationFailed)
+        ));
     }
 
     /// `verify_auto` rejects a proof whose cryptosuite the toolkit doesn't implement.

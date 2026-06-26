@@ -226,7 +226,7 @@ A Verifiable Credential is a JSON object with this structure:
     "type": "DataIntegrityProof",
     "cryptosuite": "eddsa-jcs-2022",
     "proofPurpose": "assertionMethod",
-    "proofValue": "base64-encoded-signature...",
+    "proofValue": "z-multibase-encoded-signature...",
   },
 }
 ```
@@ -256,13 +256,17 @@ signed.verify_auto(&public_key)?;            // reads the algorithm from proof.c
 
 ### Bring-your-own / external signatures
 
-If you compute a signature outside the crate (e.g. in an HSM), call [`signing_payload`] to get the exact JCS bytes to sign, then wrap the result with `Proof::new_data_integrity(cryptosuite, base64_signature)` (or `Proof::set_proof_value`) and `VerifiableCredential::from_parts(unsigned, proof)`. The `proofValue` is the base64-encoded raw signature.
+If you compute a signature outside the crate (e.g. in an HSM), call [`signing_payload`] to get the exact JCS bytes to sign, then wrap the result with `Proof::new_data_integrity(cryptosuite, proof_value)` (or `Proof::set_proof_value`) and `VerifiableCredential::from_parts(unsigned, proof)`. The `proofValue` is the **multibase (base58btc)** encoding of the raw signature bytes — i.e. `multibase::encode(Base58Btc, signature)`, a `z`-prefixed string.
 
 ### Canonical signing
 
-The signature is computed over the credential serialized with **JCS (JSON Canonicalization Scheme, [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785))**, used by every cryptosuite above. Canonicalization sorts object keys and normalizes number formatting, so the signed bytes are independent of field ordering. This means a signature stays valid across a serialize/deserialize round-trip and across encodings (JSON, CBOR, Protobuf) — the proof is over the credential's canonical form, not the wire bytes. The emitted proof is a `DataIntegrityProof` whose `cryptosuite` matches the signing algorithm.
+The signature is computed over the credential serialized with **JCS (JSON Canonicalization Scheme, [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785))**, used by every cryptosuite above. Canonicalization sorts object keys and normalizes number formatting, so the signed bytes are independent of field ordering. This means a signature stays valid across a serialize/deserialize round-trip and across encodings (JSON, CBOR, Protobuf) — the proof is over the credential's canonical form, not the wire bytes. The emitted proof is a `DataIntegrityProof` whose `cryptosuite` matches the signing algorithm, with the signature stored as a multibase (base58btc) `proofValue`.
 
-> **Compatibility note:** signatures are not interchangeable with pre-0.6 releases, which signed over non-canonical JSON. Credentials issued by 0.5.x must be re-signed.
+Every algorithm works across all three formats. For CBOR and Protobuf, sign with `sign_{cbor,protobuf}_vc_with_algorithm(bytes, algorithm, private_key)` and verify with `verify_{cbor,protobuf}_vc_auto(bytes, public_key)` (reads the cryptosuite) or `..._with_algorithm`. Because the signature is over the format-independent JCS form, a credential signed in one format verifies in any other.
+
+ML-DSA signing is **hedged** (FIPS 204's randomized variant), so ML-DSA signatures are non-deterministic; Ed25519 signatures remain deterministic.
+
+> **Compatibility note:** signatures are not interchangeable across encodings of the `proofValue`. 0.5.x signed over non-canonical JSON; 0.6.x used a base64 `proofValue`; this release uses a **multibase** `proofValue`. Credentials issued by earlier versions must be re-signed.
 
 ---
 
