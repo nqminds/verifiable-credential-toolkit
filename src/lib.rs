@@ -268,7 +268,7 @@ pub struct Proof {
 
 impl Proof {
     /// Construct a `DataIntegrityProof` for the given `cryptosuite`, carrying the
-    /// base64-encoded `proof_value`. This is the entry point for wrapping an
+    /// multibase-encoded `proof_value`. This is the entry point for wrapping an
     /// externally-computed signature (e.g. an ML-DSA signature produced out of process):
     /// build the proof, attach it with [VerifiableCredential::from_parts], and the
     /// credential serializes like any other.
@@ -293,7 +293,7 @@ impl Proof {
         }
     }
 
-    /// The base64-encoded `proofValue` (the raw signature bytes, base64-encoded).
+    /// The `proofValue` string (the raw signature bytes, multibase base58btc-encoded).
     pub fn proof_value(&self) -> &str {
         &self.proof_value
     }
@@ -364,7 +364,7 @@ impl Proof {
         self
     }
 
-    /// Set the base64-encoded `proofValue`. Use this to inject an externally-computed
+    /// Set the multibase-encoded `proofValue`. Use this to inject an externally-computed
     /// signature (e.g. ML-DSA signed out of process) into a proof.
     pub fn set_proof_value(mut self, proof_value: String) -> Self {
         self.proof_value = proof_value;
@@ -478,10 +478,11 @@ impl UnsignedVerifiableCredential {
     /// Sign with the given [Algorithm] and a raw private key of the matching length
     /// (Ed25519: 32-byte seed; ML-DSA: the FIPS 204 expanded signing key — 2560 / 4032 /
     /// 4896 bytes for ML-DSA-44 / 65 / 87). The signature is taken over the JCS-canonical
-    /// credential and stored base64-encoded in a `DataIntegrityProof` whose `cryptosuite`
-    /// is [Algorithm::cryptosuite].
+    /// credential and stored multibase base58btc-encoded in a `DataIntegrityProof` whose
+    /// `cryptosuite` is [Algorithm::cryptosuite].
     ///
-    /// ML-DSA signing is deterministic (FIPS 204 optional variant) with an empty context.
+    /// ML-DSA signing is hedged (FIPS 204 randomized variant) with an empty context, so
+    /// signatures are non-deterministic but remain verifiable by anyone.
     pub fn sign_with_algorithm(
         self,
         algorithm: Algorithm,
