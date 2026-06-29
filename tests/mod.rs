@@ -3,9 +3,10 @@ mod tests {
     use chrono::{DateTime, Duration, Utc};
     use url::Url;
     use verifiable_credential_toolkit::{
-        generate_keypair, generate_keypair_bytes, Algorithm, Holder, HolderObject, Issuer,
-        IssuerObject, Proof, SchemaSource, SigningKey, UnsignedVerifiableCredential, VcError,
-        VerifiableCredential, VerifiablePresentation, VerifyingKey,
+        generate_keypair, generate_keypair_bytes, generate_ml_dsa_keypair, Algorithm, Holder,
+        HolderObject, Issuer, IssuerObject, MlDsaSigningKey, MlDsaVerifyingKey, Proof,
+        SchemaSource, SigningKey, UnsignedVerifiableCredential, VcError, VerifiableCredential,
+        VerifiablePresentation, VerifyingKey,
     };
 
     /// Load the test signing key from disk.
@@ -869,6 +870,250 @@ mod tests {
         assert!(matches!(
             signed.verify_auto(&public_key),
             Err(VcError::UnsupportedCryptosuite(suite)) if suite == "bbs-2023"
+        ));
+    }
+
+    /// The Ed25519-typed `verify` must refuse a credential whose proof names a non-Ed25519
+    /// cryptosuite (e.g. ML-DSA), rather than silently trying to read 32-byte Ed25519 keys
+    /// out of an ML-DSA proof. This is the distinguishing branch of `verify` vs
+    /// `verify_with_algorithm` (which trusts the caller's algorithm).
+    #[test]
+    fn ed25519_verify_rejects_mldsa_cryptosuite() {
+        let (private_key, _) = generate_keypair_bytes(Algorithm::MlDsa65);
+        let signed = sample_unsigned()
+            .sign_with_algorithm(Algorithm::MlDsa65, &private_key)
+            .expect("sign");
+
+        // `verify` is Ed25519-only; the ML-DSA cryptosuite must be rejected up front.
+        assert!(matches!(
+            signed.verify(&verifying_key()),
+            Err(VcError::UnsupportedCryptosuite(suite)) if suite == "mldsa65-jcs-2025"
+        ));
+    }
+
+    /// `generate_keypair_bytes` must emit keys of exactly the FIPS 204 / Ed25519 lengths the
+    /// bilateral wire contract pins (see ML_DSA_NOTES.md). A drift here silently breaks
+    /// interop with partners, so lock the sizes in a test.
+    #[test]
+    fn keypair_byte_lengths_match_wire_contract() {
+        for (algorithm, private_len, public_len) in [
+            (Algorithm::Ed25519, 32, 32),
+            (Algorithm::MlDsa44, 2560, 1312),
+            (Algorithm::MlDsa65, 4032, 1952),
+            (Algorithm::MlDsa87, 4896, 2592),
+        ] {
+            let (private_key, public_key) = generate_keypair_bytes(algorithm);
+            assert_eq!(
+                private_key.len(),
+                private_len,
+                "{algorithm:?} private key length"
+            );
+            assert_eq!(
+                public_key.len(),
+                public_len,
+                "{algorithm:?} public key length"
+            );
+        }
+    }
+
+    /// ML-DSA signing is hedged (FIPS 204 randomized variant), so signing the same payload
+    /// twice yields different `proofValue`s — and both must still verify. Guards against a
+    /// regression to deterministic signing.
+    #[test]
+    fn mldsa_signing_is_hedged_and_nondeterministic() {
+        let (private_key, public_key) = generate_keypair_bytes(Algorithm::MlDsa65);
+
+        let first = sample_unsigned()
+            .sign_with_algorithm(Algorithm::MlDsa65, &private_key)
+            .expect("first sign");
+        let second = sample_unsigned()
+            .sign_with_algorithm(Algorithm::MlDsa65, &private_key)
+            .expect("second sign");
+
+        assert_ne!(
+            first.proof.proof_value(),
+            second.proof.proof_value(),
+            "hedged ML-DSA signatures over the same payload must differ"
+        );
+        first.verify_auto(&public_key).expect("first verifies");
+        second.verify_auto(&public_key).expect("second verifies");
+    }
+
+    /// A wrong-length ML-DSA signing key must surface as a typed `KeyDecode` error, not a
+    /// panic — the FIPS 204 expanded-key loader can panic on malformed bytes, and signing
+    /// guards against that since keys are caller-supplied (see ML_DSA_NOTES.md §3).
+    #[test]
+    fn mldsa_sign_rejects_wrong_length_key_without_panicking() {
+        for bad_key in [vec![0u8; 16], vec![0u8; 4031], vec![7u8; 5000]] {
+            assert!(matches!(
+                sample_unsigned().sign_with_algorithm(Algorithm::MlDsa65, &bad_key),
+                Err(VcError::KeyDecode(_))
+            ));
+        }
+    }
+
+    /// A wrong-length ML-DSA public key is rejected at verification with `InvalidPublicKey`,
+    /// distinct from a well-formed-but-wrong key (which fails as `SignatureVerificationFailed`).
+    #[test]
+    fn mldsa_verify_rejects_wrong_length_public_key() {
+        let (private_key, _) = generate_keypair_bytes(Algorithm::MlDsa65);
+        let signed = sample_unsigned()
+            .sign_with_algorithm(Algorithm::MlDsa65, &private_key)
+            .expect("sign");
+
+        assert!(matches!(
+            signed.verify_with_algorithm(Algorithm::MlDsa65, &[0u8; 100]),
+            Err(VcError::InvalidPublicKey(_))
+        ));
+    }
+
+    /// A well-formed ML-DSA signature verified against a different (valid) key of the same
+    /// parameter set fails as `SignatureVerificationFailed` — the ML-DSA analogue of
+    /// [verify_rejects_wrong_public_key].
+    #[test]
+    fn mldsa_verify_rejects_wrong_key_same_param_set() {
+        let (private_key, _) = generate_keypair_bytes(Algorithm::MlDsa65);
+        let (_, other_public_key) = generate_keypair_bytes(Algorithm::MlDsa65);
+
+        let signed = sample_unsigned()
+            .sign_with_algorithm(Algorithm::MlDsa65, &private_key)
+            .expect("sign");
+
+        assert!(matches!(
+            signed.verify_auto(&other_public_key),
+            Err(VcError::SignatureVerificationFailed)
+        ));
+    }
+
+    /// Round-trips every `Algorithm` through its `cryptosuite` string and back, pinning the
+    /// provisional ML-DSA identifiers and ensuring the two mappings stay mutually inverse.
+    #[test]
+    fn algorithm_cryptosuite_round_trips() {
+        for algorithm in [
+            Algorithm::Ed25519,
+            Algorithm::MlDsa44,
+            Algorithm::MlDsa65,
+            Algorithm::MlDsa87,
+        ] {
+            assert_eq!(
+                Algorithm::from_cryptosuite(algorithm.cryptosuite()),
+                Some(algorithm)
+            );
+        }
+        assert_eq!(Algorithm::from_cryptosuite("not-a-real-suite"), None);
+    }
+
+    // --- Typed ML-DSA keys ----------------------------------------------------
+
+    /// The typed-key path: `generate_ml_dsa_keypair` → `sign_ml_dsa` → `verify_ml_dsa` for
+    /// every ML-DSA parameter set. The algorithm rides along with the key, so no separate
+    /// `Algorithm` argument is threaded through.
+    #[test]
+    fn ml_dsa_typed_keys_sign_and_verify() {
+        for algorithm in [Algorithm::MlDsa44, Algorithm::MlDsa65, Algorithm::MlDsa87] {
+            let keypair = generate_ml_dsa_keypair(algorithm).expect("generate typed ML-DSA keys");
+            assert_eq!(keypair.signing_key.algorithm(), algorithm);
+
+            let signed = sample_unsigned()
+                .sign_ml_dsa(&keypair.signing_key)
+                .unwrap_or_else(|e| panic!("sign_ml_dsa failed for {algorithm:?}: {e}"));
+            signed
+                .verify_ml_dsa(&keypair.verifying_key)
+                .unwrap_or_else(|e| panic!("verify_ml_dsa failed for {algorithm:?}: {e}"));
+        }
+    }
+
+    /// `generate_ml_dsa_keypair` and the typed-key constructors reject Ed25519 — they are an
+    /// ML-DSA-only convenience.
+    #[test]
+    fn typed_ml_dsa_keys_reject_ed25519() {
+        assert!(matches!(
+            generate_ml_dsa_keypair(Algorithm::Ed25519),
+            Err(VcError::KeyDecode(_))
+        ));
+        assert!(matches!(
+            MlDsaSigningKey::new(Algorithm::Ed25519, &[0u8; 32]),
+            Err(VcError::KeyDecode(_))
+        ));
+        assert!(matches!(
+            MlDsaVerifyingKey::new(Algorithm::Ed25519, &[0u8; 32]),
+            Err(VcError::KeyDecode(_))
+        ));
+    }
+
+    /// The typed-key constructors length-check against the parameter set, so a wrong-length
+    /// buffer is rejected up front rather than at sign/verify time.
+    #[test]
+    fn typed_ml_dsa_keys_reject_wrong_length() {
+        // ML-DSA-65 signing key is 4032 bytes, verifying key 1952.
+        assert!(matches!(
+            MlDsaSigningKey::new(Algorithm::MlDsa65, &[0u8; 4031]),
+            Err(VcError::KeyDecode(_))
+        ));
+        assert!(matches!(
+            MlDsaVerifyingKey::new(Algorithm::MlDsa65, &[0u8; 1953]),
+            Err(VcError::KeyDecode(_))
+        ));
+        // A verifying-key-sized buffer is still wrong for a signing key.
+        assert!(matches!(
+            MlDsaSigningKey::new(Algorithm::MlDsa65, &[0u8; 1952]),
+            Err(VcError::KeyDecode(_))
+        ));
+    }
+
+    /// `verify_ml_dsa` pins the proof's cryptosuite to the key's parameter set: a credential
+    /// signed with ML-DSA-44 must not verify under an ML-DSA-87 key (even though both are
+    /// valid keys), surfacing as `UnsupportedCryptosuite`.
+    #[test]
+    fn verify_ml_dsa_rejects_mismatched_param_set() {
+        let kp_44 = generate_ml_dsa_keypair(Algorithm::MlDsa44).expect("44 keys");
+        let kp_87 = generate_ml_dsa_keypair(Algorithm::MlDsa87).expect("87 keys");
+
+        let signed = sample_unsigned()
+            .sign_ml_dsa(&kp_44.signing_key)
+            .expect("sign with ML-DSA-44");
+
+        assert!(matches!(
+            signed.verify_ml_dsa(&kp_87.verifying_key),
+            Err(VcError::UnsupportedCryptosuite(suite)) if suite == "mldsa44-jcs-2025"
+        ));
+    }
+
+    /// The signing key's `Debug` must not leak the secret bytes.
+    #[test]
+    fn ml_dsa_signing_key_debug_is_redacted() {
+        let keypair = generate_ml_dsa_keypair(Algorithm::MlDsa65).expect("keys");
+        let debug = format!("{:?}", keypair.signing_key);
+        assert!(debug.contains("REDACTED"), "got: {debug}");
+        // A run of the raw key bytes must not appear in the Debug output.
+        let raw = format!("{:?}", keypair.signing_key.as_bytes());
+        assert!(!debug.contains(&raw));
+    }
+
+    /// A `DataIntegrityProof` with no `cryptosuite` is rejected rather than assumed to be
+    /// Ed25519 — by both the Ed25519-typed `verify` and `verify_auto`.
+    #[test]
+    fn verify_rejects_missing_cryptosuite() {
+        let vc: VerifiableCredential = serde_json::from_value(serde_json::json!({
+            "@context": ["https://www.w3.org/ns/credentials/v2"],
+            "type": ["VerifiableCredential"],
+            "issuer": "https://example.com/",
+            "credentialSubject": { "id": "did:example:subject" },
+            "proof": {
+                "type": "DataIntegrityProof",
+                "proofPurpose": "assertionMethod",
+                "proofValue": "z111" // never reached; cryptosuite check fails first
+            }
+        }))
+        .expect("VC without cryptosuite should still deserialize");
+
+        assert!(matches!(
+            vc.verify(&verifying_key()),
+            Err(VcError::MissingCryptosuite)
+        ));
+        assert!(matches!(
+            vc.verify_auto(&[0u8; 32]),
+            Err(VcError::MissingCryptosuite)
         ));
     }
 }

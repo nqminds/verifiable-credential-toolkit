@@ -62,6 +62,12 @@ pub enum VcError {
     #[error("unsupported cryptosuite: {0}")]
     UnsupportedCryptosuite(String),
 
+    /// The proof carries no `cryptosuite`, so the verification algorithm cannot be
+    /// determined. `DataIntegrityProof` requires one; a proof without it is rejected
+    /// rather than being assumed to be Ed25519.
+    #[error("proof is missing a cryptosuite")]
+    MissingCryptosuite,
+
     /// The signature did not verify against the credential and public key.
     #[error("signature verification failed")]
     SignatureVerificationFailed,

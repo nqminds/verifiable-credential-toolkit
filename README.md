@@ -120,7 +120,7 @@ Add to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-verifiable-credential-toolkit = "0.6"
+verifiable-credential-toolkit = "0.7"
 ```
 
 Or install directly from GitHub:
@@ -252,6 +252,16 @@ signed.verify_auto(&public_key)?;            // reads the algorithm from proof.c
 
 `verify_auto` dispatches on the proof's `cryptosuite`; `verify_with_algorithm` takes an explicit algorithm; `verify` is the Ed25519-typed convenience wrapper. Ed25519 keys can still be loaded as raw 32-byte files (`{timestamp}.priv` / `.pub` from the CLI tools).
 
+For ML-DSA there are also typed keys mirroring Ed25519's `SigningKey` / `VerifyingKey`: `MlDsaSigningKey` / `MlDsaVerifyingKey` carry their parameter set, are length-checked at construction, and pair with `sign_ml_dsa` / `verify_ml_dsa` so the algorithm can't disagree with the key (and `verify_ml_dsa` rejects a proof whose cryptosuite names a different parameter set). Generate them with `generate_ml_dsa_keypair(Algorithm)`:
+
+```rust
+let keypair = generate_ml_dsa_keypair(Algorithm::MlDsa65)?;     // typed pair
+let signed = unsigned.sign_ml_dsa(&keypair.signing_key)?;
+signed.verify_ml_dsa(&keypair.verifying_key)?;
+```
+
+Use the raw-byte `sign_with_algorithm` / `verify_*` path for HSM, cross-language, or wasm interop where keys are just bytes.
+
 > ⚠️ **Provisional ML-DSA cryptosuite identifiers.** The W3C `vc-di-mldsa` cryptosuite is still a Working Draft with no finalized identifier, multikey codec, or canonicalization choice. The `mldsa{44,65,87}-jcs-2025` strings above are a **bilateral convention** for closed deployments (e.g. NATO IC 2026 partners) — signing and verifying parties must agree on them out of band and document them; they are not interoperable with arbitrary third-party verifiers until the standard finalizes.
 
 ### Bring-your-own / external signatures
@@ -262,11 +272,11 @@ If you compute a signature outside the crate (e.g. in an HSM), call [`signing_pa
 
 The signature is computed over the credential serialized with **JCS (JSON Canonicalization Scheme, [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785))**, used by every cryptosuite above. Canonicalization sorts object keys and normalizes number formatting, so the signed bytes are independent of field ordering. This means a signature stays valid across a serialize/deserialize round-trip and across encodings (JSON, CBOR, Protobuf) — the proof is over the credential's canonical form, not the wire bytes. The emitted proof is a `DataIntegrityProof` whose `cryptosuite` matches the signing algorithm, with the signature stored as a multibase (base58btc) `proofValue`.
 
-Every algorithm works across all three formats. For CBOR and Protobuf, sign with `sign_{cbor,protobuf}_vc_with_algorithm(bytes, algorithm, private_key)` and verify with `verify_{cbor,protobuf}_vc_auto(bytes, public_key)` (reads the cryptosuite) or `..._with_algorithm`. Because the signature is over the format-independent JCS form, a credential signed in one format verifies in any other.
+Every algorithm works across all three formats. For CBOR and Protobuf, sign with `Cbor::sign(bytes, algorithm, private_key)` / `Protobuf::sign(...)` and verify with `Cbor::verify_auto(bytes, public_key)` (reads the cryptosuite) or `Cbor::verify(bytes, algorithm, public_key)`. Because the signature is over the format-independent JCS form, a credential signed in one format verifies in any other.
 
 ML-DSA signing is **hedged** (FIPS 204's randomized variant), so ML-DSA signatures are non-deterministic; Ed25519 signatures remain deterministic.
 
-> **Compatibility note:** signatures are not interchangeable across encodings of the `proofValue`. 0.5.x signed over non-canonical JSON; 0.6.x used a base64 `proofValue`; this release uses a **multibase** `proofValue`. Credentials issued by earlier versions must be re-signed.
+> **Compatibility note:** signatures are not interchangeable across encodings of the `proofValue`. 0.5.x signed over non-canonical JSON; 0.6.x used a base64 `proofValue`; **0.7.0** uses a **multibase** `proofValue`. Credentials issued by earlier versions must be re-signed. 0.7.0 is also breaking in that `verify` now rejects an unknown or missing `cryptosuite`, and `VcError::SignatureVerificationFailed` is a unit variant.
 
 ---
 
@@ -739,14 +749,22 @@ Cbor::verify_auto(&signed, &public_key)?;
 | Function                                                          | Description                                                              |
 | ----------------------------------------------------------------- | ------------------------------------------------------------------------ |
 | `generate_keypair() → KeyPair`                                    | Generate a new Ed25519 keypair                                           |
-| `sign(unsignedVC, privateKey) → VerifiableCredential`             | Sign a credential (throws on error)                                      |
-| `verify(signedVC, publicKey) → boolean`                           | Verify a signed credential                                               |
-| `verify_with_schema_check(signedVC, publicKey, schema) → boolean` | Verify with JSON Schema validation                                       |
-| `sign_cbor_vc(unsignedBytes, privateKey) → Uint8Array`            | Sign a CBOR-encoded credential                                           |
-| `verify_cbor_vc(signedBytes, publicKey) → boolean`                | Verify a CBOR-encoded credential                                         |
-| `sign_protobuf_vc(unsignedBytes, privateKey) → Uint8Array`        | Sign a Protobuf-encoded credential                                       |
-| `verify_protobuf_vc(signedBytes, publicKey) → boolean`            | Verify a Protobuf-encoded credential                                     |
-| `normalize_object(input) → any`                                   | Remove `undefined`/`null` values from JS objects (useful before signing) |
+| `generate_keypair_for(algorithm) → KeyPair`                       | Generate a keypair for any algorithm label (`Ed25519`, `ML-DSA-44/65/87`) |
+| `sign(unsignedVC, privateKey) → VerifiableCredential`             | Sign a credential with Ed25519 (throws on error)                         |
+| `verify(signedVC, publicKey) → boolean`                           | Verify an Ed25519 signed credential                                      |
+| `sign_with_algorithm(unsignedVC, algorithm, privateKey) → VerifiableCredential` | Sign with any algorithm and raw key bytes              |
+| `verify_with_algorithm(signedVC, algorithm, publicKey) → boolean` | Verify with an explicit algorithm                                        |
+| `verify_auto(signedVC, publicKey) → boolean`                      | Verify, reading the algorithm from the proof's `cryptosuite`             |
+| `verify_with_schema_check(signedVC, publicKey, schema) → boolean` | Verify (Ed25519) with JSON Schema validation                             |
+| `sign_cbor_vc(unsignedBytes, privateKey) → Uint8Array`            | Sign a CBOR-encoded credential with Ed25519                              |
+| `verify_cbor_vc(signedBytes, publicKey) → boolean`                | Verify a CBOR-encoded Ed25519 credential                                 |
+| `sign_cbor_vc_with_algorithm(unsignedBytes, algorithm, privateKey) → Uint8Array` | Sign CBOR bytes with any algorithm                      |
+| `verify_cbor_vc_auto(signedBytes, publicKey) → boolean`           | Verify CBOR bytes, reading the algorithm from the proof                  |
+| `sign_protobuf_vc(unsignedBytes, privateKey) → Uint8Array`        | Sign a Protobuf-encoded credential with Ed25519                          |
+| `verify_protobuf_vc(signedBytes, publicKey) → boolean`            | Verify a Protobuf-encoded Ed25519 credential                             |
+| `sign_protobuf_vc_with_algorithm(unsignedBytes, algorithm, privateKey) → Uint8Array` | Sign Protobuf bytes with any algorithm              |
+| `verify_protobuf_vc_auto(signedBytes, publicKey) → boolean`       | Verify Protobuf bytes, reading the algorithm from the proof              |
+| `normalize_object(input) → any`                                   | Recursively strip `undefined` values from a JS object/array (`null` is preserved); useful before signing |
 
 TypeScript types live in [`verifiable_credential_toolkit.d.ts`](./verifiable_credential_toolkit.d.ts). Keys use branded types (`SigningKey` / `VerifyingKey`) so a public and private key can't be swapped at a call site — `KeyPair.signing_key()` / `.verifying_key()` return the right brand, and raw bytes are branded with an assertion (`bytes as SigningKey`).
 

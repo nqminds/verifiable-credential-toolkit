@@ -28,6 +28,14 @@ import {
   decode_signed_vc_from_protobuf,
   sign_protobuf_vc,
   verify_protobuf_vc,
+  generate_keypair_for,
+  sign_with_algorithm,
+  verify_with_algorithm,
+  verify_auto,
+  sign_cbor_vc_with_algorithm,
+  verify_cbor_vc_auto,
+  sign_protobuf_vc_with_algorithm,
+  verify_protobuf_vc_auto,
 } from "./pkg/verifiable_credential_toolkit.js";
 // Data-model types come from the hand-maintained root declaration file; these
 // imports are erased at runtime (Node strips them).
@@ -220,6 +228,44 @@ try {
   pbRejected = true;
 }
 check("tampered Protobuf is rejected", pbRejected);
+
+// ── 10. Post-quantum ML-DSA (multi-algorithm API) ─────────────────────────
+// The same JSON / CBOR / Protobuf round-trips, but signed with ML-DSA-65 instead
+// of Ed25519. `generate_keypair_for` returns raw FIPS-204 key bytes; `verify_auto`
+// reads the algorithm from the proof's cryptosuite, so the verifier only needs the
+// public key. Signatures are interoperable across all three formats.
+section("10. Post-quantum ML-DSA");
+const ALG = "ML-DSA-65";
+const pqKeys = generate_keypair_for(ALG);
+const pqSk = pqKeys.signing_key();
+const pqPk = pqKeys.verifying_key();
+check("ML-DSA-65 private key is 4032 bytes", pqSk.length === 4032);
+check("ML-DSA-65 public key is 1952 bytes", pqPk.length === 1952);
+
+const pqSigned: VerifiableCredential = sign_with_algorithm(baseVC, ALG, pqSk);
+check(
+  "ML-DSA cryptosuite is recorded in the proof",
+  pqSigned.proof?.cryptosuite === "mldsa65-jcs-2025",
+);
+check(
+  "verify_with_algorithm succeeds",
+  verify_with_algorithm(pqSigned, ALG, pqPk) === true,
+);
+check("verify_auto (reads the cryptosuite) succeeds", verify_auto(pqSigned, pqPk) === true);
+
+const pqTampered: VerifiableCredential = JSON.parse(JSON.stringify(pqSigned));
+pqTampered.credentialSubject.name = "TAMPERED NAME";
+check("tampered ML-DSA credential is rejected", verify_auto(pqTampered, pqPk) === false);
+check("a wrong ML-DSA key is rejected", verify_auto(pqSigned, generate_keypair_for(ALG).verifying_key()) === false);
+
+// ML-DSA over CBOR and Protobuf, signed once via JSON and re-verified after transport.
+const pqCbor = sign_cbor_vc_with_algorithm(encode_unsigned_vc_to_cbor(baseVC), ALG, pqSk);
+check("ML-DSA over CBOR verifies (verify_cbor_vc_auto)", verify_cbor_vc_auto(pqCbor, pqPk) === true);
+const pqPb = sign_protobuf_vc_with_algorithm(encode_unsigned_vc_to_protobuf(baseVC), ALG, pqSk);
+check(
+  "ML-DSA over Protobuf verifies (verify_protobuf_vc_auto)",
+  verify_protobuf_vc_auto(pqPb, pqPk) === true,
+);
 
 // ── Summary ───────────────────────────────────────────────────────────────
 section("Summary");

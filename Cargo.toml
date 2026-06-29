@@ -1,6 +1,6 @@
 [package]
 name = "verifiable-credential-toolkit"
-version = "0.6.0"
+version = "0.7.0"
 description = "Provides methods for handling, constructing and signing Verifiable Credentials"
 authors = ["Henry Pearson <henry@nquiringminds.com>"]
 edition = "2021"
@@ -23,8 +23,6 @@ jsonschema = { version = "0.28.3", default-features = false }
 reqwest = { version = "0.12.12", features = ["blocking"] }
 url = { version = "2.5.4", features = ["serde"] }
 clap = { version = "4.5.27", features = ["derive"] }
-wasm-bindgen-test = "0.3.50"
-js-sys = "0.3.77"
 protobuf = "3.7.2"
 protobuf-json-mapping = "3.7.2"
 c2pa_cbor = "0.77.2"
@@ -37,6 +35,9 @@ getrandom_v04 = { version = "0.4", package = "getrandom", features = ["sys_rng"]
 [target.'cfg(target_family = "wasm")'.dependencies]
 wasm-bindgen = { version = "0.2", features = ["serde"] }
 serde-wasm-bindgen = "0.6.5"
+# js-sys is used only by src/wasm.rs (the wasm32-only JS ABI), so it is scoped to the
+# wasm target rather than pulled into native builds.
+js-sys = "0.3.77"
 reqwest = { version = "0.12.12", features = ["blocking"] }
 # Our own randomness (keygen + hedged signing) goes through getrandom 0.4, so its wasm
 # backend must be enabled.
@@ -49,3 +50,7 @@ getrandom = { version = "0.2.15", features = ["js"] }
 [build-dependencies]
 protobuf-codegen = "3.7"
 protoc-bin-vendored = "3"
+
+# wasm-bindgen-test is only used by tests/wasm.rs, which compiles for the wasm target.
+[target.'cfg(target_family = "wasm")'.dev-dependencies]
+wasm-bindgen-test = "0.3.50"
