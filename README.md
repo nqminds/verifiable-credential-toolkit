@@ -719,14 +719,20 @@ All fallible operations return `Result<_, VcError>` — a typed error enum you c
 
 #### Serialization formats (CBOR / Protobuf)
 
-The `bindings` module abstracts wire formats behind the `CredentialCodec` trait. Each format (`bindings::cbor::Cbor`, `bindings::protobuf::Protobuf`) implements it, and two generic helpers work over any codec:
+The `bindings` module abstracts wire formats behind the `CredentialCodec` trait. Each format (`bindings::cbor::Cbor`, `bindings::protobuf::Protobuf`) implements four bytes↔domain conversions; the sign/verify pipeline is provided once as default methods on the trait, so the format *type* is the entry point — there are no per-format free functions to learn. Because the signature is over the format-independent JCS canonical form, a credential signed in one format verifies in any other.
 
-| Function | Description |
+| Method (on `Cbor` / `Protobuf`) | Description |
 | --- | --- |
-| `bindings::sign_via::<C>(&[u8], &SigningKey) → Result<Vec<u8>>` | Decode unsigned bytes in format `C`, sign, re-encode |
-| `bindings::verify_via::<C>(&[u8], &VerifyingKey) → Result<()>` | Decode signed bytes in format `C` and verify |
+| `C::encode_unsigned(&Unsigned…) → Result<Vec<u8>>` / `C::encode_signed(&…) → Result<Vec<u8>>` | Encode to this format's bytes |
+| `C::decode_unsigned(&[u8])` / `C::decode_signed(&[u8])` | Decode from this format's bytes |
+| `C::sign(&[u8], Algorithm, &[u8]) → Result<Vec<u8>>` | Decode unsigned bytes, sign with any cryptosuite, re-encode |
+| `C::verify(&[u8], Algorithm, &[u8]) → Result<()>` | Decode signed bytes and verify with an explicit algorithm |
+| `C::verify_auto(&[u8], &[u8]) → Result<()>` | Verify, reading the algorithm from the proof's `cryptosuite` |
 
-The per-format convenience wrappers (`sign_cbor_vc`, `verify_cbor_vc`, `sign_protobuf_vc`, `verify_protobuf_vc`) are thin shims over these.
+```rust
+let signed = Cbor::sign(&unsigned_cbor, Algorithm::MlDsa65, &private_key)?;
+Cbor::verify_auto(&signed, &public_key)?;
+```
 
 ### WASM/JavaScript API
 

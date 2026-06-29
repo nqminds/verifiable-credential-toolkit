@@ -1,21 +1,15 @@
-use crate::bindings::{
-    sign_via, sign_with_algorithm_via, verify_auto_via, verify_via, verify_with_algorithm_via,
-    CredentialCodec,
-};
+use crate::bindings::CredentialCodec;
 use crate::proto_schemas::vc::UnsignedVerifiableCredential as ProtobufUnsignedVerifiableCredential;
 use crate::proto_schemas::vc::VerifiableCredential as ProtobufVerifiableCredential;
 use crate::UnsignedVerifiableCredential;
+use crate::VcError;
 use crate::VerifiableCredential;
-use crate::{Algorithm, SigningKey, VcError, VerifyingKey};
-use protobuf::Message;
 use protobuf_json_mapping::{
     parse_from_str as json_to_protobuf, print_to_string as protobuf_to_json,
 };
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use serde_json::Value;
-
-pub type ProtoResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 /// `json_name` of every field whose JSON shape is open (arbitrary objects or
 /// string-or-object polymorphism). On the wire these are typed `string` fields holding
@@ -51,6 +45,10 @@ impl CredentialCodec for Protobuf {
 
     fn decode_signed(bytes: &[u8]) -> Result<VerifiableCredential, VcError> {
         decode_from_protobuf::<ProtobufVerifiableCredential, _>(bytes)
+    }
+
+    fn encode_unsigned(vc: &UnsignedVerifiableCredential) -> Result<Vec<u8>, VcError> {
+        encode_to_protobuf::<_, ProtobufUnsignedVerifiableCredential>(vc)
     }
 
     fn encode_signed(vc: &VerifiableCredential) -> Result<Vec<u8>, VcError> {
@@ -162,78 +160,10 @@ where
     protobuf.write_to_bytes().map_err(codec_err)
 }
 
-/// Decode protobuf bytes into the protobuf-generated unsigned VC struct.
-pub fn decode_unsigned_vc_from_protobuf(
-    bytes: &[u8],
-) -> ProtoResult<ProtobufUnsignedVerifiableCredential> {
-    Ok(ProtobufUnsignedVerifiableCredential::parse_from_bytes(
-        bytes,
-    )?)
-}
-
-/// Decode protobuf bytes into the protobuf-generated signed VC struct.
-pub fn decode_signed_vc_from_protobuf(bytes: &[u8]) -> ProtoResult<ProtobufVerifiableCredential> {
-    Ok(ProtobufVerifiableCredential::parse_from_bytes(bytes)?)
-}
-
-/// Encode an unsigned VC Rust struct into protobuf bytes.
-pub fn encode_unsigned_vc_to_protobuf(vc: &UnsignedVerifiableCredential) -> ProtoResult<Vec<u8>> {
-    Ok(encode_to_protobuf::<_, ProtobufUnsignedVerifiableCredential>(vc)?)
-}
-
-/// Encode the existing signed VC Rust struct into protobuf bytes.
-pub fn encode_signed_vc_to_protobuf(vc: &VerifiableCredential) -> ProtoResult<Vec<u8>> {
-    Ok(encode_to_protobuf::<_, ProtobufVerifiableCredential>(vc)?)
-}
-
-/// Convenience wrapper: decode unsigned VC protobuf, sign it, and re-encode as protobuf.
-pub fn sign_protobuf_vc(
-    unsigned_vc_protobuf: &[u8],
-    signing_key: &SigningKey,
-) -> Result<Vec<u8>, VcError> {
-    sign_via::<Protobuf>(unsigned_vc_protobuf, signing_key)
-}
-
-/// Convenience wrapper: decode signed VC protobuf and verify its signature.
-pub fn verify_protobuf_vc(
-    signed_vc_protobuf: &[u8],
-    verifying_key: &VerifyingKey,
-) -> Result<(), VcError> {
-    verify_via::<Protobuf>(signed_vc_protobuf, verifying_key)
-}
-
-/// Decode unsigned VC protobuf, sign with the given [Algorithm] + raw private key,
-/// re-encode as protobuf. Supports every cryptosuite (Ed25519, ML-DSA-44/65/87).
-pub fn sign_protobuf_vc_with_algorithm(
-    unsigned_vc_protobuf: &[u8],
-    algorithm: Algorithm,
-    private_key: &[u8],
-) -> Result<Vec<u8>, VcError> {
-    sign_with_algorithm_via::<Protobuf>(unsigned_vc_protobuf, algorithm, private_key)
-}
-
-/// Decode signed VC protobuf and verify with an explicit [Algorithm] + raw public key.
-pub fn verify_protobuf_vc_with_algorithm(
-    signed_vc_protobuf: &[u8],
-    algorithm: Algorithm,
-    public_key: &[u8],
-) -> Result<(), VcError> {
-    verify_with_algorithm_via::<Protobuf>(signed_vc_protobuf, algorithm, public_key)
-}
-
-/// Decode signed VC protobuf and verify, reading the algorithm from the proof's
-/// `cryptosuite`. The caller supplies only the raw public key bytes.
-pub fn verify_protobuf_vc_auto(
-    signed_vc_protobuf: &[u8],
-    public_key: &[u8],
-) -> Result<(), VcError> {
-    verify_auto_via::<Protobuf>(signed_vc_protobuf, public_key)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generate_keypair;
+    use crate::{generate_keypair_bytes, Algorithm};
     use serde_json::json;
 
     fn sample_unsigned_vc() -> UnsignedVerifiableCredential {
@@ -258,16 +188,15 @@ mod tests {
 
     #[test]
     fn test_sign_and_verify_roundtrip() {
-        let keypair = generate_keypair();
+        let (private_key, public_key) = generate_keypair_bytes(Algorithm::Ed25519);
 
-        let unsigned_vc = sample_unsigned_vc();
         let unsigned_bytes =
-            encode_unsigned_vc_to_protobuf(&unsigned_vc).expect("unsigned encode failed");
+            Protobuf::encode_unsigned(&sample_unsigned_vc()).expect("unsigned encode failed");
 
-        let signed_bytes = sign_protobuf_vc(&unsigned_bytes, &keypair.signing_key)
+        let signed_bytes = Protobuf::sign(&unsigned_bytes, Algorithm::Ed25519, &private_key)
             .expect("protobuf signing failed");
 
-        verify_protobuf_vc(&signed_bytes, &keypair.verifying_key)
+        Protobuf::verify(&signed_bytes, Algorithm::Ed25519, &public_key)
             .expect("protobuf verification failed");
     }
 
@@ -276,7 +205,7 @@ mod tests {
     /// arrays for the typed `repeated` protobuf fields.
     #[test]
     fn test_single_element_oneormany_roundtrip() {
-        let keypair = generate_keypair();
+        let (private_key, public_key) = generate_keypair_bytes(Algorithm::Ed25519);
 
         let unsigned_vc: UnsignedVerifiableCredential = serde_json::from_value(json!({
           "@context": ["https://www.w3.org/ns/credentials/v2"],
@@ -288,11 +217,11 @@ mod tests {
         .expect("sample unsigned VC should deserialize");
 
         let unsigned_bytes =
-            encode_unsigned_vc_to_protobuf(&unsigned_vc).expect("unsigned encode failed");
-        let signed_bytes = sign_protobuf_vc(&unsigned_bytes, &keypair.signing_key)
+            Protobuf::encode_unsigned(&unsigned_vc).expect("unsigned encode failed");
+        let signed_bytes = Protobuf::sign(&unsigned_bytes, Algorithm::Ed25519, &private_key)
             .expect("protobuf signing failed");
 
-        verify_protobuf_vc(&signed_bytes, &keypair.verifying_key)
+        Protobuf::verify(&signed_bytes, Algorithm::Ed25519, &public_key)
             .expect("protobuf verification failed");
 
         // The decoded credential must preserve the single-element shapes.

@@ -3,13 +3,13 @@ use ed25519_dalek::{
     Signature, Signer, SigningKey as DalekSigningKey, Verifier, VerifyingKey as DalekVerifyingKey,
 };
 use multibase::Base;
-use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::formats::PreferOne;
 use serde_with::{serde_as, OneOrMany};
 use std::collections::HashMap;
 use std::fmt;
+use std::marker::PhantomData;
 use url::Url;
 
 pub mod bindings;
@@ -489,20 +489,7 @@ impl UnsignedVerifiableCredential {
         private_key: &[u8],
     ) -> Result<VerifiableCredential, VcError> {
         let message = self.signing_payload()?;
-        let signature = match algorithm {
-            Algorithm::Ed25519 => {
-                let array: [u8; 32] = private_key
-                    .try_into()
-                    .map_err(|_| VcError::InvalidPrivateKeyLength)?;
-                DalekSigningKey::from_bytes(&array)
-                    .sign(&message)
-                    .to_bytes()
-                    .to_vec()
-            }
-            Algorithm::MlDsa44 => mldsa_sign::<ml_dsa::MlDsa44>(private_key, &message)?,
-            Algorithm::MlDsa65 => mldsa_sign::<ml_dsa::MlDsa65>(private_key, &message)?,
-            Algorithm::MlDsa87 => mldsa_sign::<ml_dsa::MlDsa87>(private_key, &message)?,
-        };
+        let signature = algorithm.scheme().sign(private_key, &message)?;
         let proof = Proof::new_data_integrity(
             algorithm.cryptosuite(),
             multibase::encode(Base::Base58Btc, signature),
@@ -580,22 +567,7 @@ impl VerifiableCredential {
         let (_, signature) = multibase::decode(&self.proof.proof_value)
             .map_err(|e| VcError::ProofDecode(e.to_string()))?;
 
-        match algorithm {
-            Algorithm::Ed25519 => {
-                let array: [u8; 32] = public_key.try_into().map_err(|_| {
-                    VcError::InvalidPublicKey("Ed25519 public key must be 32 bytes".to_string())
-                })?;
-                let sig = Signature::from_slice(&signature)
-                    .map_err(|e| VcError::MalformedSignature(e.to_string()))?;
-                DalekVerifyingKey::from_bytes(&array)
-                    .map_err(|e| VcError::InvalidPublicKey(e.to_string()))?
-                    .verify(&message, &sig)
-                    .map_err(|_| VcError::SignatureVerificationFailed)
-            }
-            Algorithm::MlDsa44 => mldsa_verify::<ml_dsa::MlDsa44>(public_key, &message, &signature),
-            Algorithm::MlDsa65 => mldsa_verify::<ml_dsa::MlDsa65>(public_key, &message, &signature),
-            Algorithm::MlDsa87 => mldsa_verify::<ml_dsa::MlDsa87>(public_key, &message, &signature),
-        }
+        algorithm.scheme().verify(public_key, &message, &signature)
     }
 
     /// Verify by reading the algorithm from the proof's `cryptosuite` and dispatching to
@@ -651,6 +623,88 @@ impl Algorithm {
             _ => None,
         }
     }
+
+    /// The single dispatch point from the runtime [Algorithm] tag to the compile-time
+    /// [SignatureScheme] that implements it. Every sign / verify / keygen call routes
+    /// through here, so this is the only place that enumerates the variants — adding an
+    /// algorithm means adding one arm here plus one trait impl.
+    fn scheme(self) -> Box<dyn SignatureScheme> {
+        match self {
+            Algorithm::Ed25519 => Box::new(Ed25519Scheme),
+            Algorithm::MlDsa44 => Box::new(MlDsaScheme::<ml_dsa::MlDsa44>(PhantomData)),
+            Algorithm::MlDsa65 => Box::new(MlDsaScheme::<ml_dsa::MlDsa65>(PhantomData)),
+            Algorithm::MlDsa87 => Box::new(MlDsaScheme::<ml_dsa::MlDsa87>(PhantomData)),
+        }
+    }
+}
+
+/// The per-algorithm signing operations, behind one interface. Implemented by a
+/// zero-sized marker per scheme ([Ed25519Scheme], [MlDsaScheme]) and selected at runtime
+/// by [Algorithm::scheme]. Keeping this internal means the public API stays the
+/// [Algorithm] enum and the methods on the credential; this trait only removes the
+/// duplicated `match` arms and provides the seam where a FIPS-validated / HSM backend can
+/// be dropped in as one extra impl.
+trait SignatureScheme {
+    /// Sign `message` with a raw private key of this scheme's expected length.
+    fn sign(&self, private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError>;
+    /// Verify a raw `signature` over `message` with a raw public key.
+    fn verify(&self, public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<(), VcError>;
+    /// Generate a fresh key pair, returning `(private_key, public_key)` as raw bytes.
+    fn generate_keypair(&self) -> (Vec<u8>, Vec<u8>);
+}
+
+/// Ed25519 (EdDSA) over 32-byte keys.
+struct Ed25519Scheme;
+
+impl SignatureScheme for Ed25519Scheme {
+    fn sign(&self, private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError> {
+        let array: [u8; 32] = private_key
+            .try_into()
+            .map_err(|_| VcError::InvalidPrivateKeyLength)?;
+        Ok(DalekSigningKey::from_bytes(&array)
+            .sign(message)
+            .to_bytes()
+            .to_vec())
+    }
+
+    fn verify(&self, public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<(), VcError> {
+        let array: [u8; 32] = public_key.try_into().map_err(|_| {
+            VcError::InvalidPublicKey("Ed25519 public key must be 32 bytes".to_string())
+        })?;
+        let sig = Signature::from_slice(signature)
+            .map_err(|e| VcError::MalformedSignature(e.to_string()))?;
+        DalekVerifyingKey::from_bytes(&array)
+            .map_err(|e| VcError::InvalidPublicKey(e.to_string()))?
+            .verify(message, &sig)
+            .map_err(|_| VcError::SignatureVerificationFailed)
+    }
+
+    fn generate_keypair(&self) -> (Vec<u8>, Vec<u8>) {
+        let signing_key = DalekSigningKey::from_bytes(&random_seed());
+        (
+            signing_key.to_bytes().to_vec(),
+            signing_key.verifying_key().to_bytes().to_vec(),
+        )
+    }
+}
+
+/// ML-DSA (FIPS 204) for a given parameter set `P` (`MlDsa44` / `MlDsa65` / `MlDsa87`).
+/// Thin adapter over the `mldsa_*` helpers, which own the hedged-signing and
+/// panic-guard details.
+struct MlDsaScheme<P>(PhantomData<P>);
+
+impl<P: ml_dsa::MlDsaParams> SignatureScheme for MlDsaScheme<P> {
+    fn sign(&self, private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError> {
+        mldsa_sign::<P>(private_key, message)
+    }
+
+    fn verify(&self, public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<(), VcError> {
+        mldsa_verify::<P>(public_key, message, signature)
+    }
+
+    fn generate_keypair(&self) -> (Vec<u8>, Vec<u8>) {
+        mldsa_generate::<P>()
+    }
 }
 
 /// Sign `message` with a raw FIPS 204 expanded ML-DSA signing key, returning the raw
@@ -701,13 +755,20 @@ fn mldsa_verify<P: ml_dsa::MlDsaParams>(
     }
 }
 
+/// Fill a fresh 32-byte seed from the operating-system CSPRNG, accessed directly through
+/// `getrandom` — the same entropy source `rand::OsRng` wraps. Panics only if the OS RNG is
+/// unavailable, which is unrecoverable and matches the previous `OsRng`-based behavior.
+fn random_seed() -> [u8; 32] {
+    let mut seed = [0u8; 32];
+    getrandom_v04::fill(&mut seed).expect("operating-system RNG is unavailable");
+    seed
+}
+
 /// Generate an ML-DSA key pair from a fresh random seed, returning
 /// `(expanded_signing_key_bytes, verifying_key_bytes)` in their FIPS 204 encodings.
 #[allow(deprecated)] // to_expanded: we intentionally export the expanded key form
 fn mldsa_generate<P: ml_dsa::MlDsaParams>() -> (Vec<u8>, Vec<u8>) {
-    use rand::RngCore;
-    let mut seed = [0u8; 32];
-    OsRng.fill_bytes(&mut seed);
+    let seed = random_seed();
     let seed = ml_dsa::B32::try_from(&seed[..]).expect("seed is 32 bytes");
     let signing_key = ml_dsa::ExpandedSigningKey::<P>::from_seed(&seed);
     (
@@ -720,18 +781,7 @@ fn mldsa_generate<P: ml_dsa::MlDsaParams>() -> (Vec<u8>, Vec<u8>) {
 /// raw bytes suitable for [UnsignedVerifiableCredential::sign_with_algorithm] and
 /// [VerifiableCredential::verify_with_algorithm].
 pub fn generate_keypair_bytes(algorithm: Algorithm) -> (Vec<u8>, Vec<u8>) {
-    match algorithm {
-        Algorithm::Ed25519 => {
-            let signing_key = DalekSigningKey::generate(&mut OsRng);
-            (
-                signing_key.to_bytes().to_vec(),
-                signing_key.verifying_key().to_bytes().to_vec(),
-            )
-        }
-        Algorithm::MlDsa44 => mldsa_generate::<ml_dsa::MlDsa44>(),
-        Algorithm::MlDsa65 => mldsa_generate::<ml_dsa::MlDsa65>(),
-        Algorithm::MlDsa87 => mldsa_generate::<ml_dsa::MlDsa87>(),
-    }
+    algorithm.scheme().generate_keypair()
 }
 
 /// A 32-byte Ed25519 private key, used to [sign](UnsignedVerifiableCredential::sign)
@@ -822,8 +872,7 @@ pub struct KeyPair {
 
 /// Generate a new Ed25519 [KeyPair].
 pub fn generate_keypair() -> KeyPair {
-    let mut csprng = OsRng;
-    let signing_key = DalekSigningKey::generate(&mut csprng);
+    let signing_key = DalekSigningKey::from_bytes(&random_seed());
     let verifying_key = signing_key.verifying_key();
 
     KeyPair {

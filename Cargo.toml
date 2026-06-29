@@ -18,13 +18,11 @@ serde = { version = "1.0.217", features = ["derive"] }
 serde_json = "1.0.137"
 chrono = { version = "0.4.39", features = ["serde"] }
 serde_with = "3.12.0"
-ed25519-dalek = { version = "2.1.1", features = ["serde", "rand_core"] }
-base64 = "0.22.1"
+ed25519-dalek = { version = "2.1.1", features = ["serde"] }
 jsonschema = { version = "0.28.3", default-features = false }
 reqwest = { version = "0.12.12", features = ["blocking"] }
 url = { version = "2.5.4", features = ["serde"] }
 clap = { version = "4.5.27", features = ["derive"] }
-rand = "0.8"
 wasm-bindgen-test = "0.3.50"
 js-sys = "0.3.77"
 protobuf = "3.7.2"
@@ -40,14 +38,13 @@ getrandom_v04 = { version = "0.4", package = "getrandom", features = ["sys_rng"]
 wasm-bindgen = { version = "0.2", features = ["serde"] }
 serde-wasm-bindgen = "0.6.5"
 reqwest = { version = "0.12.12", features = ["blocking"] }
-# ml-dsa pulls in getrandom 0.4 transitively; enable its wasm backend so the crate
-# still compiles for wasm32 (rand 0.8 uses the separate getrandom 0.2 below).
+# Our own randomness (keygen + hedged signing) goes through getrandom 0.4, so its wasm
+# backend must be enabled.
 getrandom_v04 = { package = "getrandom", version = "0.4", features = ["sys_rng", "wasm_js"] }
-
-
-[dependencies.getrandom]
-version = "0.2.15"
-features = ["js"]
+# getrandom 0.2 is still pulled in transitively (ahash, via jsonschema) and has no default
+# wasm backend; enable its `js` backend so the crate compiles for wasm32. Needed only on
+# wasm — on native this version resolves automatically.
+getrandom = { version = "0.2.15", features = ["js"] }
 
 [build-dependencies]
 protobuf-codegen = "3.7"

@@ -1,21 +1,7 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use c2pa_cbor::to_vec;
 use verifiable_credential_toolkit::{
-    bindings::{
-        cbor::{
-            decode_signed_vc_from_cbor, decode_unsigned_vc_from_cbor, encode_signed_vc_to_cbor,
-            sign_cbor_vc, sign_cbor_vc_with_algorithm, verify_cbor_vc, verify_cbor_vc_auto,
-            verify_cbor_vc_with_algorithm, Cbor,
-        },
-        protobuf::{
-            decode_signed_vc_from_protobuf, decode_unsigned_vc_from_protobuf,
-            encode_signed_vc_to_protobuf, encode_unsigned_vc_to_protobuf, sign_protobuf_vc,
-            sign_protobuf_vc_with_algorithm, verify_protobuf_vc, verify_protobuf_vc_auto,
-            verify_protobuf_vc_with_algorithm, Protobuf,
-        },
-        CredentialCodec,
-    },
+    bindings::{cbor::Cbor, protobuf::Protobuf, CredentialCodec},
     generate_keypair_bytes, Algorithm, SigningKey, UnsignedVerifiableCredential, VcError,
     VerifiableCredential, VerifyingKey,
 };
@@ -49,7 +35,7 @@ fn sample_signed_vc(private_key: &SigningKey) -> VerifiableCredential {
 }
 
 fn unsigned_vc_to_protobuf_bytes(vc: &UnsignedVerifiableCredential) -> Vec<u8> {
-    encode_unsigned_vc_to_protobuf(vc).expect("Failed to encode unsigned VC to protobuf")
+    Protobuf::encode_unsigned(vc).expect("Failed to encode unsigned VC to protobuf")
 }
 
 /// Build an unsigned VC whose `credentialSubject` carries `value`, the arbitrary-JSON
@@ -67,7 +53,7 @@ fn vc_with_subject_value(value: serde_json::Value) -> UnsignedVerifiableCredenti
 /// Round-trip a `credentialSubject.value` through Protobuf and return what comes back.
 fn protobuf_roundtrip_subject_value(value: serde_json::Value) -> serde_json::Value {
     let vc = vc_with_subject_value(value);
-    let bytes = encode_unsigned_vc_to_protobuf(&vc).expect("protobuf encode failed");
+    let bytes = Protobuf::encode_unsigned(&vc).expect("protobuf encode failed");
     let decoded = Protobuf::decode_unsigned(&bytes).expect("protobuf decode failed");
     serde_json::to_value(&decoded).expect("re-serialize decoded VC")["credentialSubject"]["value"]
         .clone()
@@ -76,8 +62,8 @@ fn protobuf_roundtrip_subject_value(value: serde_json::Value) -> serde_json::Val
 /// Round-trip a `credentialSubject.value` through CBOR and return what comes back.
 fn cbor_roundtrip_subject_value(value: serde_json::Value) -> serde_json::Value {
     let vc = vc_with_subject_value(value);
-    let bytes = to_vec(&vc).expect("CBOR encode failed");
-    let decoded = decode_unsigned_vc_from_cbor(&bytes).expect("CBOR decode failed");
+    let bytes = Cbor::encode_unsigned(&vc).expect("CBOR encode failed");
+    let decoded = Cbor::decode_unsigned(&bytes).expect("CBOR decode failed");
     serde_json::to_value(&decoded).expect("re-serialize decoded VC")["credentialSubject"]["value"]
         .clone()
 }
@@ -87,10 +73,13 @@ fn cbor_sign_and_verify_roundtrip() {
     let private_key = load_private_key();
     let public_key = load_public_key();
 
-    let unsigned_bytes = to_vec(&sample_unsigned_vc()).expect("Failed to encode unsigned VC");
-    let signed_bytes = sign_cbor_vc(&unsigned_bytes, &private_key).expect("CBOR signing failed");
+    let unsigned_bytes =
+        Cbor::encode_unsigned(&sample_unsigned_vc()).expect("Failed to encode unsigned VC");
+    let signed_bytes = Cbor::sign(&unsigned_bytes, Algorithm::Ed25519, &private_key.to_bytes())
+        .expect("CBOR signing failed");
 
-    verify_cbor_vc(&signed_bytes, &public_key).expect("CBOR verification failed");
+    Cbor::verify(&signed_bytes, Algorithm::Ed25519, &public_key.to_bytes())
+        .expect("CBOR verification failed");
 }
 
 #[test]
@@ -99,19 +88,20 @@ fn cbor_encode_decode_signed_roundtrip() {
     let public_key = load_public_key();
 
     let signed_vc = sample_signed_vc(&private_key);
-    let cbor_bytes = encode_signed_vc_to_cbor(&signed_vc).expect("Failed to encode signed VC");
-    let decoded_vc = decode_signed_vc_from_cbor(&cbor_bytes).expect("Failed to decode signed VC");
+    let cbor_bytes = Cbor::encode_signed(&signed_vc).expect("Failed to encode signed VC");
+    let decoded_vc = Cbor::decode_signed(&cbor_bytes).expect("Failed to decode signed VC");
 
     assert_eq!(signed_vc, decoded_vc);
-    verify_cbor_vc(&cbor_bytes, &public_key).expect("CBOR verification failed");
+    Cbor::verify(&cbor_bytes, Algorithm::Ed25519, &public_key.to_bytes())
+        .expect("CBOR verification failed");
 }
 
 #[test]
 fn cbor_decode_rejects_invalid_bytes() {
     let invalid = [0xff];
 
-    assert!(decode_unsigned_vc_from_cbor(&invalid).is_err());
-    assert!(decode_signed_vc_from_cbor(&invalid).is_err());
+    assert!(Cbor::decode_unsigned(&invalid).is_err());
+    assert!(Cbor::decode_signed(&invalid).is_err());
 }
 
 #[test]
@@ -119,15 +109,16 @@ fn cbor_verify_rejects_tampered_payload() {
     let private_key = load_private_key();
     let public_key = load_public_key();
 
-    let unsigned_bytes = to_vec(&sample_unsigned_vc()).expect("Failed to encode unsigned VC");
-    let mut signed_bytes =
-        sign_cbor_vc(&unsigned_bytes, &private_key).expect("CBOR signing failed");
+    let unsigned_bytes =
+        Cbor::encode_unsigned(&sample_unsigned_vc()).expect("Failed to encode unsigned VC");
+    let mut signed_bytes = Cbor::sign(&unsigned_bytes, Algorithm::Ed25519, &private_key.to_bytes())
+        .expect("CBOR signing failed");
 
     assert!(!signed_bytes.is_empty());
     let idx = signed_bytes.len() / 2;
     signed_bytes[idx] ^= 0x01;
 
-    assert!(verify_cbor_vc(&signed_bytes, &public_key).is_err());
+    assert!(Cbor::verify(&signed_bytes, Algorithm::Ed25519, &public_key.to_bytes()).is_err());
 }
 
 #[test]
@@ -136,10 +127,11 @@ fn protobuf_sign_and_verify_roundtrip() {
     let public_key = load_public_key();
 
     let unsigned_bytes = unsigned_vc_to_protobuf_bytes(&sample_unsigned_vc());
-    let signed_bytes =
-        sign_protobuf_vc(&unsigned_bytes, &private_key).expect("Protobuf signing failed");
+    let signed_bytes = Protobuf::sign(&unsigned_bytes, Algorithm::Ed25519, &private_key.to_bytes())
+        .expect("Protobuf signing failed");
 
-    verify_protobuf_vc(&signed_bytes, &public_key).expect("Protobuf verification failed");
+    Protobuf::verify(&signed_bytes, Algorithm::Ed25519, &public_key.to_bytes())
+        .expect("Protobuf verification failed");
 }
 
 #[test]
@@ -148,8 +140,7 @@ fn protobuf_encode_and_verify_roundtrip() {
     let public_key = load_public_key();
 
     let signed_vc = sample_signed_vc(&private_key);
-    let protobuf_bytes =
-        encode_signed_vc_to_protobuf(&signed_vc).expect("Failed to encode signed VC");
+    let protobuf_bytes = Protobuf::encode_signed(&signed_vc).expect("Failed to encode signed VC");
 
     // The typed schema must round-trip the credential without loss: decoding the
     // protobuf bytes back into the domain type reproduces the original exactly.
@@ -157,8 +148,8 @@ fn protobuf_encode_and_verify_roundtrip() {
         .expect("Failed to decode signed VC into domain type");
     assert_eq!(signed_vc, decoded);
 
-    assert!(decode_signed_vc_from_protobuf(&protobuf_bytes).is_ok());
-    verify_protobuf_vc(&protobuf_bytes, &public_key).expect("Protobuf verification failed");
+    Protobuf::verify(&protobuf_bytes, Algorithm::Ed25519, &public_key.to_bytes())
+        .expect("Protobuf verification failed");
 }
 
 #[test]
@@ -166,8 +157,8 @@ fn protobuf_decode_rejects_invalid_bytes() {
     // Malformed length-delimited field (truncated payload)
     let invalid = [0x0A];
 
-    assert!(decode_unsigned_vc_from_protobuf(&invalid).is_err());
-    assert!(decode_signed_vc_from_protobuf(&invalid).is_err());
+    assert!(Protobuf::decode_unsigned(&invalid).is_err());
+    assert!(Protobuf::decode_signed(&invalid).is_err());
 }
 
 /// A codec-level decode failure surfaces through the `CredentialCodec` trait as
@@ -194,13 +185,14 @@ fn protobuf_verify_rejects_tampered_payload() {
 
     let unsigned_bytes = unsigned_vc_to_protobuf_bytes(&sample_unsigned_vc());
     let mut signed_bytes =
-        sign_protobuf_vc(&unsigned_bytes, &private_key).expect("Protobuf signing failed");
+        Protobuf::sign(&unsigned_bytes, Algorithm::Ed25519, &private_key.to_bytes())
+            .expect("Protobuf signing failed");
 
     assert!(!signed_bytes.is_empty());
     let idx = signed_bytes.len() / 2;
     signed_bytes[idx] ^= 0x01;
 
-    assert!(verify_protobuf_vc(&signed_bytes, &public_key).is_err());
+    assert!(Protobuf::verify(&signed_bytes, Algorithm::Ed25519, &public_key.to_bytes()).is_err());
 }
 
 // --- Number fidelity through each codec ---------------------------------------
@@ -318,7 +310,7 @@ fn protobuf_full_unsigned_credential_roundtrip() {
     let vc: UnsignedVerifiableCredential =
         serde_json::from_value(kitchen_sink_unsigned_json()).expect("kitchen-sink should parse");
 
-    let bytes = encode_unsigned_vc_to_protobuf(&vc).expect("encode failed");
+    let bytes = Protobuf::encode_unsigned(&vc).expect("encode failed");
     let decoded = Protobuf::decode_unsigned(&bytes).expect("decode failed");
 
     assert_eq!(vc, decoded);
@@ -335,10 +327,12 @@ fn protobuf_full_credential_signs_and_verifies() {
 
     let vc: UnsignedVerifiableCredential =
         serde_json::from_value(kitchen_sink_unsigned_json()).expect("kitchen-sink should parse");
-    let unsigned_bytes = encode_unsigned_vc_to_protobuf(&vc).expect("encode failed");
+    let unsigned_bytes = Protobuf::encode_unsigned(&vc).expect("encode failed");
 
-    let signed_bytes = sign_protobuf_vc(&unsigned_bytes, &private_key).expect("signing failed");
-    verify_protobuf_vc(&signed_bytes, &public_key).expect("verification failed");
+    let signed_bytes = Protobuf::sign(&unsigned_bytes, Algorithm::Ed25519, &private_key.to_bytes())
+        .expect("signing failed");
+    Protobuf::verify(&signed_bytes, Algorithm::Ed25519, &public_key.to_bytes())
+        .expect("verification failed");
 
     let decoded = Protobuf::decode_signed(&signed_bytes).expect("decode failed");
     assert_eq!(decoded.unsigned, vc);
@@ -372,7 +366,7 @@ fn protobuf_full_proof_fields_roundtrip() {
     }))
     .expect("fabricated signed VC should parse");
 
-    let bytes = encode_signed_vc_to_protobuf(&signed).expect("encode failed");
+    let bytes = Protobuf::encode_signed(&signed).expect("encode failed");
     let decoded = Protobuf::decode_signed(&bytes).expect("decode failed");
 
     assert_eq!(signed, decoded);
@@ -393,14 +387,11 @@ fn codecs_preserve_array_credential_subject() {
     }))
     .expect("array-subject VC should parse");
 
-    let pb = encode_unsigned_vc_to_protobuf(&vc).expect("protobuf encode");
+    let pb = Protobuf::encode_unsigned(&vc).expect("protobuf encode");
     assert_eq!(Protobuf::decode_unsigned(&pb).expect("protobuf decode"), vc);
 
-    let cbor = to_vec(&vc).expect("cbor encode");
-    assert_eq!(
-        decode_unsigned_vc_from_cbor(&cbor).expect("cbor decode"),
-        vc
-    );
+    let cbor = Cbor::encode_unsigned(&vc).expect("cbor encode");
+    assert_eq!(Cbor::decode_unsigned(&cbor).expect("cbor decode"), vc);
 }
 
 /// A `null` nested inside `credentialSubject` survives the Protobuf round-trip — the
@@ -425,7 +416,7 @@ fn protobuf_credential_status_roundtrips() {
     }))
     .expect("VC with status should parse");
 
-    let bytes = encode_unsigned_vc_to_protobuf(&vc).expect("encode failed");
+    let bytes = Protobuf::encode_unsigned(&vc).expect("encode failed");
     let decoded = Protobuf::decode_unsigned(&bytes).expect("decode failed");
 
     assert_eq!(vc, decoded);
@@ -444,20 +435,19 @@ fn signature_is_independent_of_codec() {
     let signed = unsigned.sign(&private_key).expect("signing failed");
 
     // Protobuf transport.
-    let pb = encode_signed_vc_to_protobuf(&signed).expect("protobuf encode failed");
-    verify_protobuf_vc(&pb, &public_key).expect("protobuf verification failed");
+    let pb = Protobuf::encode_signed(&signed).expect("protobuf encode failed");
+    Protobuf::verify(&pb, Algorithm::Ed25519, &public_key.to_bytes())
+        .expect("protobuf verification failed");
     assert_eq!(
         Protobuf::decode_signed(&pb).expect("protobuf decode"),
         signed
     );
 
     // CBOR transport.
-    let cbor = encode_signed_vc_to_cbor(&signed).expect("cbor encode failed");
-    verify_cbor_vc(&cbor, &public_key).expect("cbor verification failed");
-    assert_eq!(
-        decode_signed_vc_from_cbor(&cbor).expect("cbor decode"),
-        signed
-    );
+    let cbor = Cbor::encode_signed(&signed).expect("cbor encode failed");
+    Cbor::verify(&cbor, Algorithm::Ed25519, &public_key.to_bytes())
+        .expect("cbor verification failed");
+    assert_eq!(Cbor::decode_signed(&cbor).expect("cbor decode"), signed);
 }
 
 /// Regression: an object-form `issuer` carrying several extra properties must sign and
@@ -489,18 +479,20 @@ fn signing_is_stable_for_object_issuer_with_extra_properties() {
 
         let signed = unsigned.sign(&private_key).expect("signing failed");
 
-        let pb = encode_signed_vc_to_protobuf(&signed).expect("protobuf encode failed");
-        verify_protobuf_vc(&pb, &public_key).expect("protobuf verification after round-trip");
+        let pb = Protobuf::encode_signed(&signed).expect("protobuf encode failed");
+        Protobuf::verify(&pb, Algorithm::Ed25519, &public_key.to_bytes())
+            .expect("protobuf verification after round-trip");
 
-        let cbor = encode_signed_vc_to_cbor(&signed).expect("cbor encode failed");
-        verify_cbor_vc(&cbor, &public_key).expect("cbor verification after round-trip");
+        let cbor = Cbor::encode_signed(&signed).expect("cbor encode failed");
+        Cbor::verify(&cbor, Algorithm::Ed25519, &public_key.to_bytes())
+            .expect("cbor verification after round-trip");
     }
 }
 
 // --- ML-DSA over CBOR and Protobuf, and cross-format interop ------------------
 
 /// Every supported algorithm signs and verifies through both codecs (verify_auto reads
-/// the cryptosuite; verify_with_algorithm is explicit).
+/// the cryptosuite; verify with an explicit algorithm asserts it).
 #[test]
 fn all_algorithms_sign_verify_via_cbor_and_protobuf() {
     for algorithm in [
@@ -512,24 +504,24 @@ fn all_algorithms_sign_verify_via_cbor_and_protobuf() {
         let (private_key, public_key) = generate_keypair_bytes(algorithm);
 
         // CBOR
-        let unsigned_cbor = to_vec(&sample_unsigned_vc()).expect("cbor encode unsigned");
-        let signed_cbor = sign_cbor_vc_with_algorithm(&unsigned_cbor, algorithm, &private_key)
+        let unsigned_cbor =
+            Cbor::encode_unsigned(&sample_unsigned_vc()).expect("cbor encode unsigned");
+        let signed_cbor = Cbor::sign(&unsigned_cbor, algorithm, &private_key)
             .unwrap_or_else(|e| panic!("cbor sign failed for {algorithm:?}: {e}"));
-        verify_cbor_vc_auto(&signed_cbor, &public_key)
+        Cbor::verify_auto(&signed_cbor, &public_key)
             .unwrap_or_else(|e| panic!("cbor verify_auto failed for {algorithm:?}: {e}"));
-        verify_cbor_vc_with_algorithm(&signed_cbor, algorithm, &public_key)
-            .unwrap_or_else(|e| panic!("cbor verify_with_algorithm failed for {algorithm:?}: {e}"));
+        Cbor::verify(&signed_cbor, algorithm, &public_key)
+            .unwrap_or_else(|e| panic!("cbor verify failed for {algorithm:?}: {e}"));
 
         // Protobuf
-        let unsigned_pb = encode_unsigned_vc_to_protobuf(&sample_unsigned_vc())
-            .expect("protobuf encode unsigned");
-        let signed_pb = sign_protobuf_vc_with_algorithm(&unsigned_pb, algorithm, &private_key)
+        let unsigned_pb =
+            Protobuf::encode_unsigned(&sample_unsigned_vc()).expect("protobuf encode unsigned");
+        let signed_pb = Protobuf::sign(&unsigned_pb, algorithm, &private_key)
             .unwrap_or_else(|e| panic!("protobuf sign failed for {algorithm:?}: {e}"));
-        verify_protobuf_vc_auto(&signed_pb, &public_key)
+        Protobuf::verify_auto(&signed_pb, &public_key)
             .unwrap_or_else(|e| panic!("protobuf verify_auto failed for {algorithm:?}: {e}"));
-        verify_protobuf_vc_with_algorithm(&signed_pb, algorithm, &public_key).unwrap_or_else(|e| {
-            panic!("protobuf verify_with_algorithm failed for {algorithm:?}: {e}")
-        });
+        Protobuf::verify(&signed_pb, algorithm, &public_key)
+            .unwrap_or_else(|e| panic!("protobuf verify failed for {algorithm:?}: {e}"));
     }
 }
 
@@ -547,20 +539,19 @@ fn mldsa_signature_is_interoperable_across_formats() {
         .expect("core sign");
 
     // Verifies as CBOR and as Protobuf.
-    let cbor = encode_signed_vc_to_cbor(&signed).expect("cbor encode");
-    verify_cbor_vc_auto(&cbor, &public_key).expect("verify cbor");
-    let protobuf = encode_signed_vc_to_protobuf(&signed).expect("protobuf encode");
-    verify_protobuf_vc_auto(&protobuf, &public_key).expect("verify protobuf");
+    let cbor = Cbor::encode_signed(&signed).expect("cbor encode");
+    Cbor::verify_auto(&cbor, &public_key).expect("verify cbor");
+    let protobuf = Protobuf::encode_signed(&signed).expect("protobuf encode");
+    Protobuf::verify_auto(&protobuf, &public_key).expect("verify protobuf");
 
     // Signed via the CBOR pipeline, transcoded to Protobuf, still verifies.
-    let unsigned_cbor = to_vec(&sample_unsigned_vc()).expect("cbor encode unsigned");
-    let signed_cbor = sign_cbor_vc_with_algorithm(&unsigned_cbor, Algorithm::MlDsa65, &private_key)
-        .expect("cbor sign");
-    let transcoded = encode_signed_vc_to_protobuf(
-        &decode_signed_vc_from_cbor(&signed_cbor).expect("decode cbor"),
-    )
-    .expect("re-encode protobuf");
-    verify_protobuf_vc_auto(&transcoded, &public_key).expect("verify transcoded");
+    let unsigned_cbor = Cbor::encode_unsigned(&sample_unsigned_vc()).expect("cbor encode unsigned");
+    let signed_cbor =
+        Cbor::sign(&unsigned_cbor, Algorithm::MlDsa65, &private_key).expect("cbor sign");
+    let transcoded =
+        Protobuf::encode_signed(&Cbor::decode_signed(&signed_cbor).expect("decode cbor"))
+            .expect("re-encode protobuf");
+    Protobuf::verify_auto(&transcoded, &public_key).expect("verify transcoded");
 }
 
 /// The interop guarantee must hold for a number-heavy, nested `credentialSubject` — the
@@ -589,14 +580,13 @@ fn mldsa_interop_preserves_number_heavy_subject() {
         .sign_with_algorithm(Algorithm::MlDsa65, &private_key)
         .expect("core sign");
 
-    let cbor = encode_signed_vc_to_cbor(&signed).expect("cbor encode");
-    verify_cbor_vc_auto(&cbor, &public_key).expect("verify cbor");
+    let cbor = Cbor::encode_signed(&signed).expect("cbor encode");
+    Cbor::verify_auto(&cbor, &public_key).expect("verify cbor");
 
-    let protobuf = encode_signed_vc_to_protobuf(&signed).expect("protobuf encode");
-    verify_protobuf_vc_auto(&protobuf, &public_key).expect("verify protobuf");
+    let protobuf = Protobuf::encode_signed(&signed).expect("protobuf encode");
+    Protobuf::verify_auto(&protobuf, &public_key).expect("verify protobuf");
 
-    let transcoded =
-        encode_signed_vc_to_protobuf(&decode_signed_vc_from_cbor(&cbor).expect("decode cbor"))
-            .expect("re-encode protobuf");
-    verify_protobuf_vc_auto(&transcoded, &public_key).expect("verify transcoded");
+    let transcoded = Protobuf::encode_signed(&Cbor::decode_signed(&cbor).expect("decode cbor"))
+        .expect("re-encode protobuf");
+    Protobuf::verify_auto(&transcoded, &public_key).expect("verify transcoded");
 }
