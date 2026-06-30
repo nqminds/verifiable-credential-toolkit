@@ -9,14 +9,6 @@ use thiserror::Error;
 /// Errors that can occur while validating, signing, or verifying a credential.
 #[derive(Debug, Error)]
 pub enum VcError {
-    /// The supplied private key was not 32 bytes.
-    #[error("invalid private key length: expected 32 bytes")]
-    InvalidPrivateKeyLength,
-
-    /// The supplied public key was not 32 bytes.
-    #[error("invalid public key length: expected 32 bytes")]
-    InvalidPublicKeyLength,
-
     /// The `credentialSubject` did not satisfy the supplied JSON Schema.
     #[error("credential subject does not match schema")]
     SchemaMismatch,

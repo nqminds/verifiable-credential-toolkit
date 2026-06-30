@@ -3,7 +3,7 @@ mod wasm_tests {
     use chrono::{DateTime, Duration, Utc};
     use url::Url;
     use verifiable_credential_toolkit::{
-        SchemaSource, SigningKey, UnsignedVerifiableCredential, VerifiableCredential,
+        Algorithm, SchemaSource, SigningKey, UnsignedVerifiableCredential, VerifiableCredential,
         VerifiablePresentation, VerifyingKey,
     };
     use wasm_bindgen_test::*;
@@ -52,7 +52,7 @@ mod wasm_tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(include_bytes!("test_data/keys/key.priv"))
+        let private_key = SigningKey::new(Algorithm::Ed25519, include_bytes!("test_data/keys/key.priv"))
             .expect("Invalid private key");
 
         let signed_vc = vc.sign(&private_key).unwrap();
@@ -73,7 +73,7 @@ mod wasm_tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(include_bytes!("test_data/keys/key.priv"))
+        let private_key = SigningKey::new(Algorithm::Ed25519, include_bytes!("test_data/keys/key.priv"))
             .expect("Invalid private key");
 
         let signed_vc = vc.sign(&private_key).expect("Failed to sign VC");
@@ -90,7 +90,7 @@ mod wasm_tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(include_bytes!("test_data/keys/key.priv"))
+        let private_key = SigningKey::new(Algorithm::Ed25519, include_bytes!("test_data/keys/key.priv"))
             .expect("Invalid private key");
 
         let schema_str = include_str!("test_data/schemas/schema.json");
@@ -112,7 +112,7 @@ mod wasm_tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(include_bytes!("test_data/keys/key.priv"))
+        let private_key = SigningKey::new(Algorithm::Ed25519, include_bytes!("test_data/keys/key.priv"))
             .expect("Invalid private key");
 
         let schema_str = include_str!("test_data/schemas/schema_fail.json");
@@ -128,7 +128,7 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn signed_to_unsigned() {
-        let private_key = SigningKey::from_bytes(include_bytes!("test_data/keys/key.priv"))
+        let private_key = SigningKey::new(Algorithm::Ed25519, include_bytes!("test_data/keys/key.priv"))
             .expect("Invalid private key");
 
         let vc: VerifiableCredential = serde_json::from_str::<UnsignedVerifiableCredential>(
@@ -160,7 +160,7 @@ mod wasm_tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(include_bytes!("test_data/keys/key.priv"))
+        let private_key = SigningKey::new(Algorithm::Ed25519, include_bytes!("test_data/keys/key.priv"))
             .expect("Invalid private key");
 
         let mut signed_vc = vc.sign(&private_key).unwrap();
@@ -191,7 +191,7 @@ mod wasm_tests {
         ))
         .expect("Failed to deserialize JSON");
 
-        let private_key = SigningKey::from_bytes(include_bytes!("test_data/keys/key.priv"))
+        let private_key = SigningKey::new(Algorithm::Ed25519, include_bytes!("test_data/keys/key.priv"))
             .expect("Invalid private key");
 
         let mut signed_vc = vc.sign(&private_key).unwrap();
@@ -235,7 +235,7 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn verify_signed_verifiable_credential() {
-        let private_key = SigningKey::from_bytes(include_bytes!("test_data/keys/key.priv"))
+        let private_key = SigningKey::new(Algorithm::Ed25519, include_bytes!("test_data/keys/key.priv"))
             .expect("Invalid private key");
 
         let vc: VerifiableCredential = serde_json::from_str::<UnsignedVerifiableCredential>(
@@ -245,7 +245,7 @@ mod wasm_tests {
         .sign(&private_key)
         .expect("Failed to sign VC");
 
-        let public_key = VerifyingKey::from_bytes(include_bytes!("test_data/keys/key.pub"))
+        let public_key = VerifyingKey::new(Algorithm::Ed25519, include_bytes!("test_data/keys/key.pub"))
             .expect("Invalid public key");
         let verify_result = vc.verify(&public_key);
 
@@ -258,7 +258,7 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn verify_denies_modified_verifiable_credential() {
-        let private_key = SigningKey::from_bytes(include_bytes!("test_data/keys/key.priv"))
+        let private_key = SigningKey::new(Algorithm::Ed25519, include_bytes!("test_data/keys/key.priv"))
             .expect("Invalid private key");
 
         let vc: VerifiableCredential = serde_json::from_str::<UnsignedVerifiableCredential>(
@@ -275,7 +275,7 @@ mod wasm_tests {
         let edited_vc: VerifiableCredential =
             serde_json::from_str(&vc_serialized).expect("Failed to deserialize JSON");
 
-        let public_key = VerifyingKey::from_bytes(include_bytes!("test_data/keys/key.pub"))
+        let public_key = VerifyingKey::new(Algorithm::Ed25519, include_bytes!("test_data/keys/key.pub"))
             .expect("Invalid public key");
 
         let verify_result = edited_vc.verify(&public_key);
@@ -287,7 +287,7 @@ mod wasm_tests {
     /// sign, and verify for every parameter set, executed in the wasm test runner.
     #[wasm_bindgen_test]
     fn mldsa_sign_verify_on_wasm() {
-        use verifiable_credential_toolkit::{generate_keypair_bytes, Algorithm};
+        use verifiable_credential_toolkit::generate_keypair_bytes;
 
         let unsigned: UnsignedVerifiableCredential = serde_json::from_value(serde_json::json!({
             "@context": ["https://www.w3.org/ns/credentials/v2"],

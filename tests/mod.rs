@@ -3,23 +3,24 @@ mod tests {
     use chrono::{DateTime, Duration, Utc};
     use url::Url;
     use verifiable_credential_toolkit::{
-        generate_keypair, generate_keypair_bytes, generate_ml_dsa_keypair, Algorithm, Holder,
-        HolderObject, Issuer, IssuerObject, MlDsaSigningKey, MlDsaVerifyingKey, Proof,
-        SchemaSource, SigningKey, UnsignedVerifiableCredential, VcError, VerifiableCredential,
-        VerifiablePresentation, VerifyingKey,
+        generate_keypair, generate_keypair_bytes, Algorithm, Holder, HolderObject, Issuer,
+        IssuerObject, Proof, SchemaSource, SigningKey, UnsignedVerifiableCredential, VcError,
+        VerifiableCredential, VerifiablePresentation, VerifyingKey,
     };
 
-    /// Load the test signing key from disk.
+    /// Load the test signing key from disk (raw 32-byte Ed25519 seed).
     fn signing_key() -> SigningKey {
-        SigningKey::from_bytes(
+        SigningKey::new(
+            Algorithm::Ed25519,
             &std::fs::read("tests/test_data/keys/key.priv").expect("read private key"),
         )
         .expect("valid private key")
     }
 
-    /// Load the test verifying key from disk.
+    /// Load the test verifying key from disk (raw 32-byte Ed25519 key).
     fn verifying_key() -> VerifyingKey {
-        VerifyingKey::from_bytes(
+        VerifyingKey::new(
+            Algorithm::Ed25519,
             &std::fs::read("tests/test_data/keys/key.pub").expect("read public key"),
         )
         .expect("valid public key")
@@ -566,24 +567,24 @@ mod tests {
         assert!(matches!(verify_result, Err(VcError::SchemaMismatch)));
     }
 
-    /// Key newtypes reject anything that isn't exactly 32 bytes.
+    /// An Ed25519 key is rejected unless it is exactly 32 bytes.
     #[test]
-    fn key_from_bytes_rejects_wrong_length() {
+    fn key_new_rejects_wrong_length() {
         assert!(matches!(
-            SigningKey::from_bytes(&[0u8; 31]),
-            Err(VcError::InvalidPrivateKeyLength)
+            SigningKey::new(Algorithm::Ed25519, &[0u8; 31]),
+            Err(VcError::KeyDecode(_))
         ));
         assert!(matches!(
-            SigningKey::from_bytes(&[0u8; 33]),
-            Err(VcError::InvalidPrivateKeyLength)
+            SigningKey::new(Algorithm::Ed25519, &[0u8; 33]),
+            Err(VcError::KeyDecode(_))
         ));
         assert!(matches!(
-            VerifyingKey::from_bytes(&[0u8; 31]),
-            Err(VcError::InvalidPublicKeyLength)
+            VerifyingKey::new(Algorithm::Ed25519, &[0u8; 31]),
+            Err(VcError::KeyDecode(_))
         ));
         // Exactly 32 bytes is accepted.
-        assert!(SigningKey::from_bytes(&[7u8; 32]).is_ok());
-        assert!(VerifyingKey::from_bytes(&[7u8; 32]).is_ok());
+        assert!(SigningKey::new(Algorithm::Ed25519, &[7u8; 32]).is_ok());
+        assert!(VerifyingKey::new(Algorithm::Ed25519, &[7u8; 32]).is_ok());
     }
 
     /// A well-formed signature verified against a different (valid) public key
@@ -598,7 +599,7 @@ mod tests {
         .expect("Failed to sign VC");
 
         // A different, valid keypair: the signature is well-formed but won't match.
-        let other = generate_keypair();
+        let other = generate_keypair(Algorithm::Ed25519);
         assert!(matches!(
             signed_vc.verify(&other.verifying_key),
             Err(VcError::SignatureVerificationFailed)
@@ -731,6 +732,71 @@ mod tests {
 
         let back: UnsignedVerifiableCredential = serde_json::from_str(&json).unwrap();
         assert_eq!(vc, back);
+    }
+
+    /// Canonicalization regression guard, across every algorithm. An issuer object
+    /// carries its flattened extras in a `HashMap`, whose iteration order varies
+    /// between instances; deserialization rebuilds that map in a generally different
+    /// order than the signer used. Because `signing_payload` canonicalizes with JCS
+    /// (RFC 8785, sorted keys), the signature is taken over an order-independent form,
+    /// so a credential with *several* issuer properties still verifies after a
+    /// serialize -> deserialize round-trip. Without canonicalization the verifier would
+    /// re-serialize the keys in a different order and reject a valid credential — the
+    /// single-property `issuer_object_flatten_round_trips` above cannot catch this, and
+    /// neither would a sign/verify of the same in-memory object (its HashMap iterates
+    /// identically both times). Exercises the full sign -> round-trip -> verify loop.
+    #[test]
+    fn multi_property_issuer_verifies_after_roundtrip_all_algorithms() {
+        use std::collections::HashMap;
+
+        // Enough distinct keys that an accidental order-match after the round-trip is
+        // astronomically unlikely, so a reversion to non-canonical signing is caught.
+        let extras = [
+            "b", "a", "c", "e", "d", "z", "m", "q", "f", "t", "j", "k",
+        ];
+
+        for algorithm in [
+            Algorithm::Ed25519,
+            Algorithm::MlDsa44,
+            Algorithm::MlDsa65,
+            Algorithm::MlDsa87,
+        ] {
+            let (private_key, public_key) = generate_keypair_bytes(algorithm);
+
+            let mut extra = HashMap::new();
+            for (i, key) in extras.iter().enumerate() {
+                extra.insert((*key).to_string(), serde_json::json!(i as i64));
+            }
+
+            let unsigned = UnsignedVerifiableCredential::builder(
+                vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
+                vec!["VerifiableCredential".to_string()],
+                Issuer::Object(IssuerObject {
+                    id: Url::parse("https://issuer.example.com/").unwrap(),
+                    additional_properties: Some(extra),
+                }),
+                serde_json::json!({ "id": "did:example:subject" }),
+            )
+            .build();
+
+            let signed = unsigned
+                .sign_with_algorithm(algorithm, &private_key)
+                .unwrap_or_else(|e| panic!("sign failed for {algorithm:?}: {e}"));
+
+            // Round-trip through JSON: deserialization rebuilds the issuer's HashMap,
+            // generally in a different iteration order than the signer's.
+            let json = serde_json::to_string(&signed).unwrap();
+            let reparsed: VerifiableCredential = serde_json::from_str(&json).unwrap();
+
+            reparsed.verify_auto(&public_key).unwrap_or_else(|e| {
+                panic!("verify_auto after round-trip failed for {algorithm:?}: {e}")
+            });
+            reparsed
+                .verify_with_algorithm(algorithm, &public_key)
+                .unwrap_or_else(|e| {
+                    panic!("verify_with_algorithm after round-trip failed for {algorithm:?}: {e}")
+                });
+        }
     }
 
     /// A signed VC survives a JSON serialize -> deserialize round-trip unchanged.
@@ -1003,86 +1069,68 @@ mod tests {
         assert_eq!(Algorithm::from_cryptosuite("not-a-real-suite"), None);
     }
 
-    // --- Typed ML-DSA keys ----------------------------------------------------
+    // --- Typed keys -----------------------------------------------------------
 
-    /// The typed-key path: `generate_ml_dsa_keypair` → `sign_ml_dsa` → `verify_ml_dsa` for
-    /// every ML-DSA parameter set. The algorithm rides along with the key, so no separate
-    /// `Algorithm` argument is threaded through.
+    /// The typed-key path: `generate_keypair` → `sign` → `verify` for every ML-DSA
+    /// parameter set. The algorithm rides along with the key, so no separate `Algorithm`
+    /// argument is threaded through — the same `sign`/`verify` used for Ed25519.
     #[test]
-    fn ml_dsa_typed_keys_sign_and_verify() {
+    fn typed_keys_sign_and_verify() {
         for algorithm in [Algorithm::MlDsa44, Algorithm::MlDsa65, Algorithm::MlDsa87] {
-            let keypair = generate_ml_dsa_keypair(algorithm).expect("generate typed ML-DSA keys");
+            let keypair = generate_keypair(algorithm);
             assert_eq!(keypair.signing_key.algorithm(), algorithm);
 
             let signed = sample_unsigned()
-                .sign_ml_dsa(&keypair.signing_key)
-                .unwrap_or_else(|e| panic!("sign_ml_dsa failed for {algorithm:?}: {e}"));
+                .sign(&keypair.signing_key)
+                .unwrap_or_else(|e| panic!("sign failed for {algorithm:?}: {e}"));
             signed
-                .verify_ml_dsa(&keypair.verifying_key)
-                .unwrap_or_else(|e| panic!("verify_ml_dsa failed for {algorithm:?}: {e}"));
+                .verify(&keypair.verifying_key)
+                .unwrap_or_else(|e| panic!("verify failed for {algorithm:?}: {e}"));
         }
     }
 
-    /// `generate_ml_dsa_keypair` and the typed-key constructors reject Ed25519 — they are an
-    /// ML-DSA-only convenience.
+    /// The key constructors length-check against the algorithm, so a wrong-length buffer is
+    /// rejected up front rather than at sign/verify time.
     #[test]
-    fn typed_ml_dsa_keys_reject_ed25519() {
-        assert!(matches!(
-            generate_ml_dsa_keypair(Algorithm::Ed25519),
-            Err(VcError::KeyDecode(_))
-        ));
-        assert!(matches!(
-            MlDsaSigningKey::new(Algorithm::Ed25519, &[0u8; 32]),
-            Err(VcError::KeyDecode(_))
-        ));
-        assert!(matches!(
-            MlDsaVerifyingKey::new(Algorithm::Ed25519, &[0u8; 32]),
-            Err(VcError::KeyDecode(_))
-        ));
-    }
-
-    /// The typed-key constructors length-check against the parameter set, so a wrong-length
-    /// buffer is rejected up front rather than at sign/verify time.
-    #[test]
-    fn typed_ml_dsa_keys_reject_wrong_length() {
+    fn typed_keys_reject_wrong_length() {
         // ML-DSA-65 signing key is 4032 bytes, verifying key 1952.
         assert!(matches!(
-            MlDsaSigningKey::new(Algorithm::MlDsa65, &[0u8; 4031]),
+            SigningKey::new(Algorithm::MlDsa65, &[0u8; 4031]),
             Err(VcError::KeyDecode(_))
         ));
         assert!(matches!(
-            MlDsaVerifyingKey::new(Algorithm::MlDsa65, &[0u8; 1953]),
+            VerifyingKey::new(Algorithm::MlDsa65, &[0u8; 1953]),
             Err(VcError::KeyDecode(_))
         ));
         // A verifying-key-sized buffer is still wrong for a signing key.
         assert!(matches!(
-            MlDsaSigningKey::new(Algorithm::MlDsa65, &[0u8; 1952]),
+            SigningKey::new(Algorithm::MlDsa65, &[0u8; 1952]),
             Err(VcError::KeyDecode(_))
         ));
     }
 
-    /// `verify_ml_dsa` pins the proof's cryptosuite to the key's parameter set: a credential
-    /// signed with ML-DSA-44 must not verify under an ML-DSA-87 key (even though both are
-    /// valid keys), surfacing as `UnsupportedCryptosuite`.
+    /// `verify` pins the proof's cryptosuite to the key's parameter set: a credential signed
+    /// with ML-DSA-44 must not verify under an ML-DSA-87 key (even though both are valid
+    /// keys), surfacing as `UnsupportedCryptosuite`.
     #[test]
-    fn verify_ml_dsa_rejects_mismatched_param_set() {
-        let kp_44 = generate_ml_dsa_keypair(Algorithm::MlDsa44).expect("44 keys");
-        let kp_87 = generate_ml_dsa_keypair(Algorithm::MlDsa87).expect("87 keys");
+    fn verify_rejects_mismatched_param_set() {
+        let kp_44 = generate_keypair(Algorithm::MlDsa44);
+        let kp_87 = generate_keypair(Algorithm::MlDsa87);
 
         let signed = sample_unsigned()
-            .sign_ml_dsa(&kp_44.signing_key)
+            .sign(&kp_44.signing_key)
             .expect("sign with ML-DSA-44");
 
         assert!(matches!(
-            signed.verify_ml_dsa(&kp_87.verifying_key),
+            signed.verify(&kp_87.verifying_key),
             Err(VcError::UnsupportedCryptosuite(suite)) if suite == "mldsa44-jcs-2025"
         ));
     }
 
     /// The signing key's `Debug` must not leak the secret bytes.
     #[test]
-    fn ml_dsa_signing_key_debug_is_redacted() {
-        let keypair = generate_ml_dsa_keypair(Algorithm::MlDsa65).expect("keys");
+    fn signing_key_debug_is_redacted() {
+        let keypair = generate_keypair(Algorithm::MlDsa65);
         let debug = format!("{:?}", keypair.signing_key);
         assert!(debug.contains("REDACTED"), "got: {debug}");
         // A run of the raw key bytes must not appear in the Debug output.

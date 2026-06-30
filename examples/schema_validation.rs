@@ -7,10 +7,12 @@
 //! Run with:
 //!   cargo run --example schema_validation
 
-use verifiable_credential_toolkit::{generate_keypair, SchemaSource, UnsignedVerifiableCredential};
+use verifiable_credential_toolkit::{
+    generate_keypair, Algorithm, SchemaSource, UnsignedVerifiableCredential,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let keypair = generate_keypair();
+    let keypair = generate_keypair(Algorithm::Ed25519);
     let signing_key = keypair.signing_key;
     let verifying_key = keypair.verifying_key;
 

@@ -123,7 +123,7 @@ pub fn normalize_and_stringify(input: &JsValue) -> Result<String, JsError> {
 pub fn sign(unsigned_vc: JsValue, private_key: &[u8]) -> Result<JsValue, JsError> {
     let unsigned = unsigned_vc_from_js(&unsigned_vc)?;
 
-    let signing_key = SigningKey::from_bytes(private_key)
+    let signing_key = SigningKey::new(Algorithm::Ed25519, private_key)
         .map_err(|e| JsError::new(&format!("Invalid private key: {}", e)))?;
     let signed = unsigned
         .sign(&signing_key)
@@ -141,7 +141,7 @@ pub fn verify(signed_vc: JsValue, public_key: &[u8]) -> Result<bool, JsError> {
         ))
     })?;
 
-    let Ok(verifying_key) = VerifyingKey::from_bytes(public_key) else {
+    let Ok(verifying_key) = VerifyingKey::new(Algorithm::Ed25519, public_key) else {
         return Ok(false);
     };
     match vc.verify(&verifying_key) {
@@ -167,7 +167,7 @@ pub fn verify_with_schema_check(
     if vc.validate(&SchemaSource::Inline(&schema_value)).is_err() {
         return Ok(false);
     }
-    let Ok(verifying_key) = VerifyingKey::from_bytes(public_key) else {
+    let Ok(verifying_key) = VerifyingKey::new(Algorithm::Ed25519, public_key) else {
         return Ok(false);
     };
     match vc.verify(&verifying_key) {
@@ -203,11 +203,8 @@ impl KeyPair {
 /// Generate a new Ed25519 keypair
 #[wasm_bindgen]
 pub fn generate_keypair() -> KeyPair {
-    let keypair = crate::generate_keypair();
-    KeyPair::new(
-        keypair.signing_key.to_bytes().to_vec(),
-        keypair.verifying_key.to_bytes().to_vec(),
-    )
+    let (signing_key, verifying_key) = generate_keypair_bytes(Algorithm::Ed25519);
+    KeyPair::new(signing_key, verifying_key)
 }
 
 /// Parse an algorithm label ("Ed25519", "ML-DSA-44", "ML-DSA-65", "ML-DSA-87";

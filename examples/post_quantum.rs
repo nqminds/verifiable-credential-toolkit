@@ -19,8 +19,8 @@
 use multibase::Base;
 use verifiable_credential_toolkit::{
     bindings::{cbor::Cbor, protobuf::Protobuf, CredentialCodec},
-    generate_keypair_bytes, generate_ml_dsa_keypair, Algorithm, Proof,
-    UnsignedVerifiableCredential, VerifiableCredential,
+    generate_keypair, generate_keypair_bytes, Algorithm, Proof, UnsignedVerifiableCredential,
+    VerifiableCredential,
 };
 
 fn sample_credential() -> UnsignedVerifiableCredential {
@@ -62,19 +62,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     // ── Step 2: Typed keys (algorithm carried by the key) ───────────────
-    // `generate_ml_dsa_keypair` returns typed keys whose parameter set travels with the
-    // bytes; `sign_ml_dsa` / `verify_ml_dsa` then can't be called with a mismatched
-    // algorithm, and the verify rejects a proof whose cryptosuite names a different set.
+    // `generate_keypair` returns a typed key pair whose algorithm travels with the bytes —
+    // the same `sign` / `verify` used for Ed25519. The algorithm is read from the key, and
+    // `verify` rejects a proof whose cryptosuite names a different parameter set.
     println!("\n=== Step 2: Typed ML-DSA keys ===\n");
-    let typed = generate_ml_dsa_keypair(Algorithm::MlDsa65)?;
-    let typed_signed = sample_credential().sign_ml_dsa(&typed.signing_key)?;
-    typed_signed.verify_ml_dsa(&typed.verifying_key)?;
-    println!("  sign_ml_dsa / verify_ml_dsa round-trip ✓");
+    let typed = generate_keypair(Algorithm::MlDsa65);
+    let typed_signed = sample_credential().sign(&typed.signing_key)?;
+    typed_signed.verify(&typed.verifying_key)?;
+    println!("  sign / verify with typed keys round-trip ✓");
     // A key for a different parameter set is refused (cryptosuite mismatch).
-    let wrong = generate_ml_dsa_keypair(Algorithm::MlDsa44)?;
+    let wrong = generate_keypair(Algorithm::MlDsa44);
     println!(
         "  an ML-DSA-44 key is rejected on this ML-DSA-65 proof: {}",
-        typed_signed.verify_ml_dsa(&wrong.verifying_key).is_err()
+        typed_signed.verify(&wrong.verifying_key).is_err()
     );
 
     // ── Step 3: Hedged signing is non-deterministic ─────────────────────

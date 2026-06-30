@@ -1,23 +1,22 @@
 use chrono::{DateTime, Utc};
-use ed25519_dalek::{
-    Signature, Signer, SigningKey as DalekSigningKey, Verifier, VerifyingKey as DalekVerifyingKey,
-};
 use multibase::Base;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::formats::PreferOne;
 use serde_with::{serde_as, OneOrMany};
 use std::collections::HashMap;
-use std::fmt;
-use std::marker::PhantomData;
 use url::Url;
 
 pub mod bindings;
+pub mod crypto;
 pub mod error;
 pub mod proto_schemas;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 
+pub use crypto::{
+    generate_keypair, generate_keypair_bytes, Algorithm, KeyPair, SigningKey, VerifyingKey,
+};
 pub use error::VcError;
 
 /// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - <https://www.w3.org/TR/vc-data-model-2.0> WITHOUT the proof
@@ -465,25 +464,16 @@ impl UnsignedVerifiableCredential {
         Ok(serde_jcs::to_vec(self)?)
     }
 
-    /// Sign the Verifiable Credential with an Ed25519 [SigningKey], producing a
-    /// [VerifiableCredential] with a default `eddsa-jcs-2022` proof. For other algorithms
-    /// use [sign_with_algorithm](UnsignedVerifiableCredential::sign_with_algorithm).
+    /// Sign the Verifiable Credential with a [SigningKey], producing a
+    /// [VerifiableCredential] with a `DataIntegrityProof`. The algorithm (and so the
+    /// proof's `cryptosuite`) is taken from the key, so the same call signs with Ed25519 or
+    /// any ML-DSA parameter set. For raw-byte interop use
+    /// [sign_with_algorithm](UnsignedVerifiableCredential::sign_with_algorithm).
     ///
     /// This performs no schema validation; call
     /// [validate](UnsignedVerifiableCredential::validate) first if you need it.
     pub fn sign(self, signing_key: &SigningKey) -> Result<VerifiableCredential, VcError> {
-        self.sign_with_algorithm(Algorithm::Ed25519, &signing_key.0)
-    }
-
-    /// Sign with a typed [MlDsaSigningKey]. The parameter set is taken from the key, so
-    /// (unlike [sign_with_algorithm](UnsignedVerifiableCredential::sign_with_algorithm)) the
-    /// algorithm and key can't disagree. The ML-DSA counterpart of
-    /// [sign](UnsignedVerifiableCredential::sign).
-    pub fn sign_ml_dsa(
-        self,
-        signing_key: &MlDsaSigningKey,
-    ) -> Result<VerifiableCredential, VcError> {
-        self.sign_with_algorithm(signing_key.algorithm, &signing_key.bytes)
+        self.sign_with_algorithm(signing_key.algorithm(), signing_key.as_bytes())
     }
 
     /// Sign with the given [Algorithm] and a raw private key of the matching length
@@ -500,7 +490,7 @@ impl UnsignedVerifiableCredential {
         private_key: &[u8],
     ) -> Result<VerifiableCredential, VcError> {
         let message = self.signing_payload()?;
-        let signature = algorithm.scheme().sign(private_key, &message)?;
+        let signature = crypto::sign_bytes(algorithm, private_key, &message)?;
         let proof = Proof::new_data_integrity(
             algorithm.cryptosuite(),
             multibase::encode(Base::Base58Btc, signature),
@@ -550,19 +540,22 @@ impl VerifiableCredential {
         self.unsigned.validate(schema)
     }
 
-    /// Verify an **Ed25519** credential against a typed [VerifyingKey]. Checks the validity
-    /// period, that the proof's `cryptosuite` is `eddsa-jcs-2022`, and the signature. A proof
-    /// that carries no `cryptosuite` is rejected ([VcError::MissingCryptosuite]) rather than
-    /// assumed to be Ed25519. For other algorithms use
-    /// [verify_with_algorithm](VerifiableCredential::verify_with_algorithm) or
+    /// Verify the credential against a typed [VerifyingKey]. Checks the validity period,
+    /// that the proof's `cryptosuite` names the same algorithm as the key (rejecting, e.g.,
+    /// an ML-DSA-87 proof under an ML-DSA-44 key, or an ML-DSA proof under an Ed25519 key),
+    /// and the signature. A proof that carries no `cryptosuite` is rejected with
+    /// [VcError::MissingCryptosuite] rather than assumed. The algorithm is taken from the
+    /// key, so this works for Ed25519 and every ML-DSA parameter set; for raw-byte interop
+    /// use [verify_with_algorithm](VerifiableCredential::verify_with_algorithm) or
     /// [verify_auto](VerifiableCredential::verify_auto).
     pub fn verify(&self, verifying_key: &VerifyingKey) -> Result<(), VcError> {
         match self.proof.cryptosuite.as_deref() {
-            Some(suite) if Algorithm::from_cryptosuite(suite) == Some(Algorithm::Ed25519) => {}
+            Some(suite)
+                if Algorithm::from_cryptosuite(suite) == Some(verifying_key.algorithm()) => {}
             Some(suite) => return Err(VcError::UnsupportedCryptosuite(suite.to_string())),
             None => return Err(VcError::MissingCryptosuite),
         }
-        self.verify_with_algorithm(Algorithm::Ed25519, &verifying_key.0)
+        self.verify_with_algorithm(verifying_key.algorithm(), verifying_key.as_bytes())
     }
 
     /// Verify with an explicit [Algorithm] and a raw public key of the matching length
@@ -580,7 +573,7 @@ impl VerifiableCredential {
         let (_, signature) = multibase::decode(&self.proof.proof_value)
             .map_err(|e| VcError::ProofDecode(e.to_string()))?;
 
-        algorithm.scheme().verify(public_key, &message, &signature)
+        crypto::verify_bytes(algorithm, public_key, &message, &signature)
     }
 
     /// Verify by reading the algorithm from the proof's `cryptosuite` and dispatching to
@@ -597,456 +590,5 @@ impl VerifiableCredential {
             .ok_or_else(|| VcError::UnsupportedCryptosuite(suite.to_string()))?;
         self.verify_with_algorithm(algorithm, public_key)
     }
-
-    /// Verify against a typed [MlDsaVerifyingKey]. Checks the validity period, that the
-    /// proof's `cryptosuite` matches the key's parameter set (rejecting, e.g., an ML-DSA-87
-    /// proof under an ML-DSA-44 key), and the signature. The ML-DSA counterpart of
-    /// [verify](VerifiableCredential::verify); a proof without a `cryptosuite` is rejected
-    /// with [VcError::MissingCryptosuite].
-    pub fn verify_ml_dsa(&self, verifying_key: &MlDsaVerifyingKey) -> Result<(), VcError> {
-        match self.proof.cryptosuite.as_deref() {
-            Some(suite) if Algorithm::from_cryptosuite(suite) == Some(verifying_key.algorithm) => {}
-            Some(suite) => return Err(VcError::UnsupportedCryptosuite(suite.to_string())),
-            None => return Err(VcError::MissingCryptosuite),
-        }
-        self.verify_with_algorithm(verifying_key.algorithm, &verifying_key.bytes)
-    }
 }
 
-/// A signature algorithm the toolkit can sign and verify with.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Algorithm {
-    /// Ed25519 (EdDSA). 32-byte keys, `eddsa-jcs-2022` cryptosuite.
-    Ed25519,
-    /// ML-DSA-44 (FIPS 204, security category 2).
-    MlDsa44,
-    /// ML-DSA-65 (FIPS 204, security category 3).
-    MlDsa65,
-    /// ML-DSA-87 (FIPS 204, security category 5).
-    MlDsa87,
-}
-
-impl Algorithm {
-    /// The `cryptosuite` identifier written into a [Proof] signed with this algorithm.
-    ///
-    /// Ed25519 uses the standardized `eddsa-jcs-2022`. The ML-DSA identifiers are
-    /// **provisional and bilateral**: the W3C `vc-di-mldsa` cryptosuite is still a Working
-    /// Draft with no finalized identifier, so these strings are a private convention that
-    /// signing and verifying parties must agree on out of band (see the README). All use
-    /// JCS (RFC 8785) canonicalization.
-    pub fn cryptosuite(self) -> &'static str {
-        match self {
-            Algorithm::Ed25519 => "eddsa-jcs-2022",
-            Algorithm::MlDsa44 => "mldsa44-jcs-2025",
-            Algorithm::MlDsa65 => "mldsa65-jcs-2025",
-            Algorithm::MlDsa87 => "mldsa87-jcs-2025",
-        }
-    }
-
-    /// Map a proof `cryptosuite` identifier back to an [Algorithm], or `None` if the
-    /// identifier is not one this library implements.
-    pub fn from_cryptosuite(cryptosuite: &str) -> Option<Self> {
-        match cryptosuite {
-            "eddsa-jcs-2022" => Some(Algorithm::Ed25519),
-            "mldsa44-jcs-2025" => Some(Algorithm::MlDsa44),
-            "mldsa65-jcs-2025" => Some(Algorithm::MlDsa65),
-            "mldsa87-jcs-2025" => Some(Algorithm::MlDsa87),
-            _ => None,
-        }
-    }
-
-    /// The FIPS 204 raw key lengths `(private, public)` in bytes for this ML-DSA parameter
-    /// set, or `None` for non-ML-DSA algorithms. Used to length-check [MlDsaSigningKey] /
-    /// [MlDsaVerifyingKey] at construction. These sizes are fixed by FIPS 204 and pinned by
-    /// the `keypair_byte_lengths_match_wire_contract` test.
-    fn ml_dsa_key_lengths(self) -> Option<(usize, usize)> {
-        match self {
-            Algorithm::Ed25519 => None,
-            Algorithm::MlDsa44 => Some((2560, 1312)),
-            Algorithm::MlDsa65 => Some((4032, 1952)),
-            Algorithm::MlDsa87 => Some((4896, 2592)),
-        }
-    }
-
-    /// The single dispatch point from the runtime [Algorithm] tag to the compile-time
-    /// [SignatureScheme] that implements it. Every sign / verify / keygen call routes
-    /// through here, so this is the only place that enumerates the variants — adding an
-    /// algorithm means adding one arm here plus one trait impl.
-    fn scheme(self) -> Box<dyn SignatureScheme> {
-        match self {
-            Algorithm::Ed25519 => Box::new(Ed25519Scheme),
-            Algorithm::MlDsa44 => Box::new(MlDsaScheme::<ml_dsa::MlDsa44>(PhantomData)),
-            Algorithm::MlDsa65 => Box::new(MlDsaScheme::<ml_dsa::MlDsa65>(PhantomData)),
-            Algorithm::MlDsa87 => Box::new(MlDsaScheme::<ml_dsa::MlDsa87>(PhantomData)),
-        }
-    }
-}
-
-/// The per-algorithm signing operations, behind one interface. Implemented by a
-/// zero-sized marker per scheme ([Ed25519Scheme], [MlDsaScheme]) and selected at runtime
-/// by [Algorithm::scheme]. Keeping this internal means the public API stays the
-/// [Algorithm] enum and the methods on the credential; this trait only removes the
-/// duplicated `match` arms and provides the seam where a FIPS-validated / HSM backend can
-/// be dropped in as one extra impl.
-trait SignatureScheme {
-    /// Sign `message` with a raw private key of this scheme's expected length.
-    fn sign(&self, private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError>;
-    /// Verify a raw `signature` over `message` with a raw public key.
-    fn verify(&self, public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<(), VcError>;
-    /// Generate a fresh key pair, returning `(private_key, public_key)` as raw bytes.
-    fn generate_keypair(&self) -> (Vec<u8>, Vec<u8>);
-}
-
-/// Ed25519 (EdDSA) over 32-byte keys.
-struct Ed25519Scheme;
-
-impl SignatureScheme for Ed25519Scheme {
-    fn sign(&self, private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError> {
-        let array: [u8; 32] = private_key
-            .try_into()
-            .map_err(|_| VcError::InvalidPrivateKeyLength)?;
-        Ok(DalekSigningKey::from_bytes(&array)
-            .sign(message)
-            .to_bytes()
-            .to_vec())
-    }
-
-    fn verify(&self, public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<(), VcError> {
-        let array: [u8; 32] = public_key.try_into().map_err(|_| {
-            VcError::InvalidPublicKey("Ed25519 public key must be 32 bytes".to_string())
-        })?;
-        let sig = Signature::from_slice(signature)
-            .map_err(|e| VcError::MalformedSignature(e.to_string()))?;
-        DalekVerifyingKey::from_bytes(&array)
-            .map_err(|e| VcError::InvalidPublicKey(e.to_string()))?
-            .verify(message, &sig)
-            .map_err(|_| VcError::SignatureVerificationFailed)
-    }
-
-    fn generate_keypair(&self) -> (Vec<u8>, Vec<u8>) {
-        let signing_key = DalekSigningKey::from_bytes(&random_seed());
-        (
-            signing_key.to_bytes().to_vec(),
-            signing_key.verifying_key().to_bytes().to_vec(),
-        )
-    }
-}
-
-/// ML-DSA (FIPS 204) for a given parameter set `P` (`MlDsa44` / `MlDsa65` / `MlDsa87`).
-/// Thin adapter over the `mldsa_*` helpers, which own the hedged-signing and
-/// panic-guard details.
-struct MlDsaScheme<P>(PhantomData<P>);
-
-impl<P: ml_dsa::MlDsaParams> SignatureScheme for MlDsaScheme<P> {
-    fn sign(&self, private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError> {
-        mldsa_sign::<P>(private_key, message)
-    }
-
-    fn verify(&self, public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<(), VcError> {
-        mldsa_verify::<P>(public_key, message, signature)
-    }
-
-    fn generate_keypair(&self) -> (Vec<u8>, Vec<u8>) {
-        mldsa_generate::<P>()
-    }
-}
-
-/// Sign `message` with a raw FIPS 204 expanded ML-DSA signing key, returning the raw
-/// signature bytes. Uses the **hedged** (randomized) variant with an empty context, as
-/// recommended by FIPS 204 §3.4 — fresh randomness mitigates fault attacks and bad-RNG
-/// edge cases. Signatures are therefore non-deterministic (still verifiable by anyone).
-///
-/// `from_expanded` does not validate the key and can panic on a malformed (but
-/// correctly-sized) key. The private key is caller-supplied, so the whole sign is run
-/// inside `catch_unwind` and a panic is reported as a [VcError] rather than aborting.
-#[allow(deprecated)] // from_expanded: importing an external expanded key is the intent here
-fn mldsa_sign<P: ml_dsa::MlDsaParams>(sk_bytes: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError> {
-    let encoded = ml_dsa::ExpandedSigningKeyBytes::<P>::try_from(sk_bytes)
-        .map_err(|_| VcError::KeyDecode("ML-DSA signing key has the wrong length".to_string()))?;
-
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let signing_key = ml_dsa::ExpandedSigningKey::<P>::from_expanded(&encoded);
-        signing_key.sign_randomized(message, b"", &mut getrandom_v04::SysRng)
-    }))
-    .map_err(|_| VcError::KeyDecode("ML-DSA signing key is malformed".to_string()))?;
-
-    let signature = result.map_err(|_| VcError::KeyDecode("ML-DSA signing failed".to_string()))?;
-    Ok(signature.encode().to_vec())
-}
-
-/// Verify a raw ML-DSA signature over `message` with a raw FIPS 204 public key.
-fn mldsa_verify<P: ml_dsa::MlDsaParams>(
-    pk_bytes: &[u8],
-    message: &[u8],
-    signature: &[u8],
-) -> Result<(), VcError> {
-    let encoded_pk = ml_dsa::EncodedVerifyingKey::<P>::try_from(pk_bytes).map_err(|_| {
-        VcError::InvalidPublicKey("ML-DSA public key has the wrong length".to_string())
-    })?;
-    let verifying_key = ml_dsa::VerifyingKey::<P>::decode(&encoded_pk);
-
-    let encoded_sig = ml_dsa::EncodedSignature::<P>::try_from(signature).map_err(|_| {
-        VcError::MalformedSignature("ML-DSA signature has the wrong length".to_string())
-    })?;
-    let signature = ml_dsa::Signature::<P>::decode(&encoded_sig).ok_or_else(|| {
-        VcError::MalformedSignature("ML-DSA signature failed to decode".to_string())
-    })?;
-
-    if verifying_key.verify_with_context(message, b"", &signature) {
-        Ok(())
-    } else {
-        Err(VcError::SignatureVerificationFailed)
-    }
-}
-
-/// Fill a fresh 32-byte seed from the operating-system CSPRNG, accessed directly through
-/// `getrandom` — the same entropy source `rand::OsRng` wraps. Panics only if the OS RNG is
-/// unavailable, which is unrecoverable and matches the previous `OsRng`-based behavior.
-fn random_seed() -> [u8; 32] {
-    let mut seed = [0u8; 32];
-    getrandom_v04::fill(&mut seed).expect("operating-system RNG is unavailable");
-    seed
-}
-
-/// Generate an ML-DSA key pair from a fresh random seed, returning
-/// `(expanded_signing_key_bytes, verifying_key_bytes)` in their FIPS 204 encodings.
-#[allow(deprecated)] // to_expanded: we intentionally export the expanded key form
-fn mldsa_generate<P: ml_dsa::MlDsaParams>() -> (Vec<u8>, Vec<u8>) {
-    let seed = random_seed();
-    let seed = ml_dsa::B32::try_from(&seed[..]).expect("seed is 32 bytes");
-    let signing_key = ml_dsa::ExpandedSigningKey::<P>::from_seed(&seed);
-    (
-        signing_key.to_expanded().to_vec(),
-        signing_key.verifying_key().encode().to_vec(),
-    )
-}
-
-/// Generate a fresh key pair for `algorithm`, returning `(private_key, public_key)` as
-/// raw bytes suitable for [UnsignedVerifiableCredential::sign_with_algorithm] and
-/// [VerifiableCredential::verify_with_algorithm].
-pub fn generate_keypair_bytes(algorithm: Algorithm) -> (Vec<u8>, Vec<u8>) {
-    algorithm.scheme().generate_keypair()
-}
-
-/// A 32-byte Ed25519 private key, used to [sign](UnsignedVerifiableCredential::sign)
-/// credentials.
-///
-/// A distinct type from [VerifyingKey] so the two cannot be swapped by accident —
-/// passing a public key where a private key is expected (or vice versa) is a compile
-/// error rather than a silent runtime failure.
-#[derive(Clone)]
-pub struct SigningKey([u8; 32]);
-
-/// A 32-byte Ed25519 public key, used to [verify](VerifiableCredential::verify)
-/// credentials. See [SigningKey] for why this is a distinct type.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct VerifyingKey([u8; 32]);
-
-impl SigningKey {
-    /// Construct a signing key from exactly 32 bytes.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, VcError> {
-        let array: [u8; 32] = bytes
-            .try_into()
-            .map_err(|_| VcError::InvalidPrivateKeyLength)?;
-        Ok(Self(array))
-    }
-
-    /// The raw 32-byte representation of the key.
-    pub fn to_bytes(&self) -> [u8; 32] {
-        self.0
-    }
-}
-
-impl VerifyingKey {
-    /// Construct a verifying key from exactly 32 bytes.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, VcError> {
-        let array: [u8; 32] = bytes
-            .try_into()
-            .map_err(|_| VcError::InvalidPublicKeyLength)?;
-        Ok(Self(array))
-    }
-
-    /// The raw 32-byte representation of the key.
-    pub fn to_bytes(&self) -> [u8; 32] {
-        self.0
-    }
-}
-
-impl From<[u8; 32]> for SigningKey {
-    fn from(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-}
-
-impl From<[u8; 32]> for VerifyingKey {
-    fn from(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-}
-
-impl TryFrom<&[u8]> for SigningKey {
-    type Error = VcError;
-    fn try_from(bytes: &[u8]) -> Result<Self, VcError> {
-        Self::from_bytes(bytes)
-    }
-}
-
-impl TryFrom<&[u8]> for VerifyingKey {
-    type Error = VcError;
-    fn try_from(bytes: &[u8]) -> Result<Self, VcError> {
-        Self::from_bytes(bytes)
-    }
-}
-
-// Redact the secret in Debug output so it can't leak into logs.
-impl fmt::Debug for SigningKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("SigningKey([REDACTED])")
-    }
-}
-
-/// An Ed25519 key pair produced by [generate_keypair].
-#[derive(Clone)]
-pub struct KeyPair {
-    /// The private key used to sign credentials.
-    pub signing_key: SigningKey,
-    /// The public key used to verify credentials.
-    pub verifying_key: VerifyingKey,
-}
-
-/// Generate a new Ed25519 [KeyPair].
-pub fn generate_keypair() -> KeyPair {
-    let signing_key = DalekSigningKey::from_bytes(&random_seed());
-    let verifying_key = signing_key.verifying_key();
-
-    KeyPair {
-        signing_key: SigningKey(signing_key.to_bytes()),
-        verifying_key: VerifyingKey(verifying_key.to_bytes()),
-    }
-}
-
-/// An ML-DSA private (signing) key bundled with the parameter set it belongs to.
-///
-/// The ML-DSA analogue of [SigningKey]: the parameter set travels with the bytes, the
-/// length is checked against it at construction, and [sign_ml_dsa](UnsignedVerifiableCredential::sign_ml_dsa)
-/// reads the algorithm from the key — so a caller can't pass an ML-DSA-44 key to an
-/// ML-DSA-87 operation, or an ML-DSA key where a verify expects a different parameter set.
-/// For raw-byte interop (an HSM, the wasm ABI, a cross-language partner) use
-/// [sign_with_algorithm](UnsignedVerifiableCredential::sign_with_algorithm) with the raw
-/// key instead.
-#[derive(Clone)]
-pub struct MlDsaSigningKey {
-    algorithm: Algorithm,
-    bytes: Vec<u8>,
-}
-
-/// An ML-DSA public (verifying) key bundled with its parameter set. See [MlDsaSigningKey].
-#[derive(Clone, PartialEq, Eq)]
-pub struct MlDsaVerifyingKey {
-    algorithm: Algorithm,
-    bytes: Vec<u8>,
-}
-
-/// Validate that `algorithm` is an ML-DSA variant and that `len` matches its FIPS 204 key
-/// length (`private` selects which of the pair to check).
-fn check_ml_dsa_key(algorithm: Algorithm, len: usize, private: bool) -> Result<(), VcError> {
-    let (private_len, public_len) = algorithm
-        .ml_dsa_key_lengths()
-        .ok_or_else(|| VcError::KeyDecode(format!("{algorithm:?} is not an ML-DSA algorithm")))?;
-    let expected = if private { private_len } else { public_len };
-    if len != expected {
-        return Err(VcError::KeyDecode(format!(
-            "{algorithm:?} {} key must be {expected} bytes, got {len}",
-            if private { "signing" } else { "verifying" }
-        )));
-    }
-    Ok(())
-}
-
-impl MlDsaSigningKey {
-    /// Wrap raw ML-DSA signing-key bytes for `algorithm`, checking the length matches the
-    /// parameter set. Errors with [VcError::KeyDecode] if `algorithm` is not ML-DSA or the
-    /// length is wrong.
-    pub fn new(algorithm: Algorithm, bytes: &[u8]) -> Result<Self, VcError> {
-        check_ml_dsa_key(algorithm, bytes.len(), true)?;
-        Ok(Self {
-            algorithm,
-            bytes: bytes.to_vec(),
-        })
-    }
-
-    /// The parameter set this key is for.
-    pub fn algorithm(&self) -> Algorithm {
-        self.algorithm
-    }
-
-    /// The raw FIPS 204 signing-key bytes.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-}
-
-impl MlDsaVerifyingKey {
-    /// Wrap raw ML-DSA verifying-key bytes for `algorithm`, checking the length matches the
-    /// parameter set. Errors with [VcError::KeyDecode] if `algorithm` is not ML-DSA or the
-    /// length is wrong.
-    pub fn new(algorithm: Algorithm, bytes: &[u8]) -> Result<Self, VcError> {
-        check_ml_dsa_key(algorithm, bytes.len(), false)?;
-        Ok(Self {
-            algorithm,
-            bytes: bytes.to_vec(),
-        })
-    }
-
-    /// The parameter set this key is for.
-    pub fn algorithm(&self) -> Algorithm {
-        self.algorithm
-    }
-
-    /// The raw FIPS 204 verifying-key bytes.
-    pub fn as_bytes(&self) -> &[u8] {
-        &self.bytes
-    }
-}
-
-// Redact the secret in Debug output so it can't leak into logs (mirrors [SigningKey]).
-impl fmt::Debug for MlDsaSigningKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("MlDsaSigningKey")
-            .field("algorithm", &self.algorithm)
-            .field("bytes", &"[REDACTED]")
-            .finish()
-    }
-}
-
-/// A typed ML-DSA key pair produced by [generate_ml_dsa_keypair].
-#[derive(Clone)]
-pub struct MlDsaKeyPair {
-    /// The private key used to sign credentials.
-    pub signing_key: MlDsaSigningKey,
-    /// The public key used to verify credentials.
-    pub verifying_key: MlDsaVerifyingKey,
-}
-
-/// Generate a typed [MlDsaKeyPair] for an ML-DSA parameter set (`MlDsa44` / `MlDsa65` /
-/// `MlDsa87`). Errors with [VcError::KeyDecode] if `algorithm` is [Algorithm::Ed25519] — use
-/// [generate_keypair] for that.
-pub fn generate_ml_dsa_keypair(algorithm: Algorithm) -> Result<MlDsaKeyPair, VcError> {
-    if algorithm.ml_dsa_key_lengths().is_none() {
-        return Err(VcError::KeyDecode(format!(
-            "{algorithm:?} is not an ML-DSA algorithm"
-        )));
-    }
-
-    let (private_key, public_key) = generate_keypair_bytes(algorithm);
-    Ok(MlDsaKeyPair {
-        signing_key: MlDsaSigningKey {
-            algorithm,
-            bytes: private_key,
-        },
-        verifying_key: MlDsaVerifyingKey {
-            algorithm,
-            bytes: public_key,
-        },
-    })
-}

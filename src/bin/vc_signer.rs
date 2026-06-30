@@ -2,7 +2,8 @@ use clap::{Parser, Subcommand};
 use std::fs;
 use std::path::PathBuf;
 use verifiable_credential_toolkit::{
-    SchemaSource, SigningKey, UnsignedVerifiableCredential, VerifiableCredential, VerifyingKey,
+    Algorithm, SchemaSource, SigningKey, UnsignedVerifiableCredential, VerifiableCredential,
+    VerifyingKey,
 };
 
 #[derive(Parser)]
@@ -79,8 +80,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
 
-            // Read the private key
-            let signing_key = SigningKey::from_bytes(&fs::read(key)?)?;
+            // Read the private key (raw 32-byte Ed25519 seed)
+            let signing_key = SigningKey::new(Algorithm::Ed25519, &fs::read(key)?)?;
 
             // Resolve the schema source from the CLI options. An inline schema
             // file is loaded here so it outlives the borrow held by SchemaSource.
@@ -135,8 +136,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             };
 
-            // Read the public key
-            let verifying_key = VerifyingKey::from_bytes(&fs::read(key)?)?;
+            // Read the public key (raw 32-byte Ed25519 key)
+            let verifying_key = VerifyingKey::new(Algorithm::Ed25519, &fs::read(key)?)?;
 
             // Verify the VC
             let result = signed_vc.verify(&verifying_key);
