@@ -751,9 +751,7 @@ mod tests {
 
         // Enough distinct keys that an accidental order-match after the round-trip is
         // astronomically unlikely, so a reversion to non-canonical signing is caught.
-        let extras = [
-            "b", "a", "c", "e", "d", "z", "m", "q", "f", "t", "j", "k",
-        ];
+        let extras = ["b", "a", "c", "e", "d", "z", "m", "q", "f", "t", "j", "k"];
 
         for algorithm in [
             Algorithm::Ed25519,

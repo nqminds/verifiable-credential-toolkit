@@ -38,7 +38,6 @@ serde-wasm-bindgen = "0.6.5"
 # js-sys is used only by src/wasm.rs (the wasm32-only JS ABI), so it is scoped to the
 # wasm target rather than pulled into native builds.
 js-sys = "0.3.77"
-reqwest = { version = "0.12.12", features = ["blocking"] }
 # Our own randomness (keygen + hedged signing) goes through getrandom 0.4, so its wasm
 # backend must be enabled.
 getrandom_v04 = { package = "getrandom", version = "0.4", features = ["sys_rng", "wasm_js"] }
@@ -51,6 +50,9 @@ getrandom = { version = "0.2.15", features = ["js"] }
 protobuf-codegen = "3.7"
 protoc-bin-vendored = "3"
 
-# wasm-bindgen-test is only used by tests/wasm.rs, which compiles for the wasm target.
+# Dev-deps for tests/wasm.rs, which compiles for the wasm target. wasm-bindgen and
+# serde-wasm-bindgen let the tests build/inspect JsValues when exercising the JS ABI.
 [target.'cfg(target_family = "wasm")'.dev-dependencies]
 wasm-bindgen-test = "0.3.50"
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6.5"

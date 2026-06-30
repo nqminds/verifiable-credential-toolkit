@@ -591,4 +591,3 @@ impl VerifiableCredential {
         self.verify_with_algorithm(algorithm, public_key)
     }
 }
-
