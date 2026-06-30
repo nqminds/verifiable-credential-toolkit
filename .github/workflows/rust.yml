@@ -17,6 +17,39 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - run: cargo test --all-features
       - run: wasm-pack test --node
+      # Run the Rust examples so they can't drift silently. post_quantum self-checks via
+      # `?`; all three fail the job on a panic or non-zero exit.
+      - run: cargo run --example full_workflow
+      - run: cargo run --example schema_validation
+      - run: cargo run --example post_quantum
+
+  # Build and run the WASM JS examples so the JS ABI and example code stay in sync with the
+  # Rust API. The Node example is a self-checking smoke test (exits non-zero on failure); the
+  # browser example's build runs tsc, so it guards the browser example against type drift.
+  wasm-examples:
+    name: wasm examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          target: wasm32-unknown-unknown
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # wasm-bindgen-cli must match the wasm-bindgen version in Cargo.toml.
+      - run: cargo install wasm-bindgen-cli --version 0.2.100
+      - name: Node example (self-checking smoke test, exercises Ed25519 + ML-DSA)
+        working-directory: wasm_nodejs_example_usage
+        run: |
+          npm install
+          npm run build
+          node index.ts
+      - name: Browser example (build + tsc typecheck)
+        working-directory: wasm_js_example_usage
+        run: |
+          npm install
+          npm run build
 
   # Check formatting with rustfmt
   formatting:
