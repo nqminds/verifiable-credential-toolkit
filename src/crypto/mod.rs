@@ -6,16 +6,17 @@
 //! special-cased, it is just another [Algorithm]. The credential `sign` / `verify`
 //! methods read the algorithm from the key, so the same call works for any algorithm.
 //!
-//! Internally each algorithm is a [SignatureScheme] implementation selected by
-//! [Algorithm::scheme]; that trait is the seam where a FIPS-validated / HSM backend can be
-//! dropped in as one more implementation without touching the public API.
+//! Each algorithm is a [SignatureScheme] implementation living in its own submodule
+//! ([ed25519], [mldsa]), selected at runtime by [Algorithm::scheme]. That trait is the seam
+//! where a FIPS-validated / HSM backend can be dropped in as one more implementation
+//! without touching the public API — and the per-algorithm split keeps each backend's
+//! dependencies and details confined to one file.
+
+mod ed25519;
+mod mldsa;
 
 use crate::VcError;
-use ed25519_dalek::{
-    Signature, Signer, SigningKey as DalekSigningKey, Verifier, VerifyingKey as DalekVerifyingKey,
-};
 use std::fmt;
-use std::marker::PhantomData;
 
 /// A signature algorithm the toolkit can sign and verify with.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -73,16 +74,16 @@ impl Algorithm {
         }
     }
 
-    /// The single dispatch point from the runtime [Algorithm] tag to the compile-time
-    /// [SignatureScheme] that implements it. Every sign / verify / keygen call routes
-    /// through here, so this is the only place that enumerates the variants — adding an
-    /// algorithm means adding one arm here plus one trait impl.
+    /// The single dispatch point from the runtime [Algorithm] tag to the [SignatureScheme]
+    /// that implements it. Every sign / verify / keygen call routes through here, so this
+    /// is the only place that enumerates the variants — adding an algorithm means adding one
+    /// arm here plus one submodule.
     fn scheme(self) -> Box<dyn SignatureScheme> {
         match self {
-            Algorithm::Ed25519 => Box::new(Ed25519Scheme),
-            Algorithm::MlDsa44 => Box::new(MlDsaScheme::<ml_dsa::MlDsa44>(PhantomData)),
-            Algorithm::MlDsa65 => Box::new(MlDsaScheme::<ml_dsa::MlDsa65>(PhantomData)),
-            Algorithm::MlDsa87 => Box::new(MlDsaScheme::<ml_dsa::MlDsa87>(PhantomData)),
+            Algorithm::Ed25519 => ed25519::scheme(),
+            Algorithm::MlDsa44 => mldsa::scheme_44(),
+            Algorithm::MlDsa65 => mldsa::scheme_65(),
+            Algorithm::MlDsa87 => mldsa::scheme_87(),
         }
     }
 }
@@ -108,12 +109,11 @@ pub(crate) fn verify_bytes(
     algorithm.scheme().verify(public_key, message, signature)
 }
 
-/// The per-algorithm signing operations, behind one interface. Implemented by a
-/// zero-sized marker per scheme ([Ed25519Scheme], [MlDsaScheme]) and selected at runtime
-/// by [Algorithm::scheme]. Keeping this private means the public API stays the [Algorithm]
-/// enum and the key types; this trait only removes the duplicated `match` arms and
-/// provides the seam where a FIPS-validated / HSM backend can be dropped in as one extra
-/// impl.
+/// The per-algorithm signing operations, behind one interface. Implemented once per
+/// algorithm in the [ed25519] / [mldsa] submodules and selected at runtime by
+/// [Algorithm::scheme]. Keeping this private means the public API stays the [Algorithm]
+/// enum and the key types; this trait only removes the duplicated `match` arms and provides
+/// the seam where a FIPS-validated / HSM backend can be dropped in as one extra impl.
 trait SignatureScheme {
     /// Sign `message` with a raw private key of this scheme's expected length.
     fn sign(&self, private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError>;
@@ -123,128 +123,13 @@ trait SignatureScheme {
     fn generate_keypair(&self) -> (Vec<u8>, Vec<u8>);
 }
 
-/// Ed25519 (EdDSA) over 32-byte keys.
-struct Ed25519Scheme;
-
-impl SignatureScheme for Ed25519Scheme {
-    fn sign(&self, private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError> {
-        let array: [u8; 32] = private_key
-            .try_into()
-            .map_err(|_| VcError::KeyDecode("Ed25519 signing key must be 32 bytes".to_string()))?;
-        Ok(DalekSigningKey::from_bytes(&array)
-            .sign(message)
-            .to_bytes()
-            .to_vec())
-    }
-
-    fn verify(&self, public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<(), VcError> {
-        let array: [u8; 32] = public_key.try_into().map_err(|_| {
-            VcError::InvalidPublicKey("Ed25519 public key must be 32 bytes".to_string())
-        })?;
-        let sig = Signature::from_slice(signature)
-            .map_err(|e| VcError::MalformedSignature(e.to_string()))?;
-        DalekVerifyingKey::from_bytes(&array)
-            .map_err(|e| VcError::InvalidPublicKey(e.to_string()))?
-            .verify(message, &sig)
-            .map_err(|_| VcError::SignatureVerificationFailed)
-    }
-
-    fn generate_keypair(&self) -> (Vec<u8>, Vec<u8>) {
-        let signing_key = DalekSigningKey::from_bytes(&random_seed());
-        (
-            signing_key.to_bytes().to_vec(),
-            signing_key.verifying_key().to_bytes().to_vec(),
-        )
-    }
-}
-
-/// ML-DSA (FIPS 204) for a given parameter set `P` (`MlDsa44` / `MlDsa65` / `MlDsa87`).
-/// Thin adapter over the `mldsa_*` helpers, which own the hedged-signing and panic-guard
-/// details.
-struct MlDsaScheme<P>(PhantomData<P>);
-
-impl<P: ml_dsa::MlDsaParams> SignatureScheme for MlDsaScheme<P> {
-    fn sign(&self, private_key: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError> {
-        mldsa_sign::<P>(private_key, message)
-    }
-
-    fn verify(&self, public_key: &[u8], message: &[u8], signature: &[u8]) -> Result<(), VcError> {
-        mldsa_verify::<P>(public_key, message, signature)
-    }
-
-    fn generate_keypair(&self) -> (Vec<u8>, Vec<u8>) {
-        mldsa_generate::<P>()
-    }
-}
-
-/// Sign `message` with a raw FIPS 204 expanded ML-DSA signing key, returning the raw
-/// signature bytes. Uses the **hedged** (randomized) variant with an empty context, as
-/// recommended by FIPS 204 §3.4 — fresh randomness mitigates fault attacks and bad-RNG
-/// edge cases. Signatures are therefore non-deterministic (still verifiable by anyone).
-///
-/// `from_expanded` does not validate the key and can panic on a malformed (but
-/// correctly-sized) key. The private key is caller-supplied, so the whole sign is run
-/// inside `catch_unwind` and a panic is reported as a [VcError] rather than aborting.
-#[allow(deprecated)] // from_expanded: importing an external expanded key is the intent here
-fn mldsa_sign<P: ml_dsa::MlDsaParams>(sk_bytes: &[u8], message: &[u8]) -> Result<Vec<u8>, VcError> {
-    let encoded = ml_dsa::ExpandedSigningKeyBytes::<P>::try_from(sk_bytes)
-        .map_err(|_| VcError::KeyDecode("ML-DSA signing key has the wrong length".to_string()))?;
-
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        let signing_key = ml_dsa::ExpandedSigningKey::<P>::from_expanded(&encoded);
-        signing_key.sign_randomized(message, b"", &mut getrandom_v04::SysRng)
-    }))
-    .map_err(|_| VcError::KeyDecode("ML-DSA signing key is malformed".to_string()))?;
-
-    let signature = result.map_err(|_| VcError::KeyDecode("ML-DSA signing failed".to_string()))?;
-    Ok(signature.encode().to_vec())
-}
-
-/// Verify a raw ML-DSA signature over `message` with a raw FIPS 204 public key.
-fn mldsa_verify<P: ml_dsa::MlDsaParams>(
-    pk_bytes: &[u8],
-    message: &[u8],
-    signature: &[u8],
-) -> Result<(), VcError> {
-    let encoded_pk = ml_dsa::EncodedVerifyingKey::<P>::try_from(pk_bytes).map_err(|_| {
-        VcError::InvalidPublicKey("ML-DSA public key has the wrong length".to_string())
-    })?;
-    let verifying_key = ml_dsa::VerifyingKey::<P>::decode(&encoded_pk);
-
-    let encoded_sig = ml_dsa::EncodedSignature::<P>::try_from(signature).map_err(|_| {
-        VcError::MalformedSignature("ML-DSA signature has the wrong length".to_string())
-    })?;
-    let signature = ml_dsa::Signature::<P>::decode(&encoded_sig).ok_or_else(|| {
-        VcError::MalformedSignature("ML-DSA signature failed to decode".to_string())
-    })?;
-
-    if verifying_key.verify_with_context(message, b"", &signature) {
-        Ok(())
-    } else {
-        Err(VcError::SignatureVerificationFailed)
-    }
-}
-
 /// Fill a fresh 32-byte seed from the operating-system CSPRNG, accessed directly through
-/// `getrandom` — the same entropy source `rand::OsRng` wraps. Panics only if the OS RNG is
-/// unavailable, which is unrecoverable and matches the previous `OsRng`-based behavior.
+/// `getrandom`. Shared by the per-algorithm key generators. Panics only if the OS RNG is
+/// unavailable, which is unrecoverable.
 fn random_seed() -> [u8; 32] {
     let mut seed = [0u8; 32];
     getrandom_v04::fill(&mut seed).expect("operating-system RNG is unavailable");
     seed
-}
-
-/// Generate an ML-DSA key pair from a fresh random seed, returning
-/// `(expanded_signing_key_bytes, verifying_key_bytes)` in their FIPS 204 encodings.
-#[allow(deprecated)] // to_expanded: we intentionally export the expanded key form
-fn mldsa_generate<P: ml_dsa::MlDsaParams>() -> (Vec<u8>, Vec<u8>) {
-    let seed = random_seed();
-    let seed = ml_dsa::B32::try_from(&seed[..]).expect("seed is 32 bytes");
-    let signing_key = ml_dsa::ExpandedSigningKey::<P>::from_seed(&seed);
-    (
-        signing_key.to_expanded().to_vec(),
-        signing_key.verifying_key().encode().to_vec(),
-    )
 }
 
 /// Generate a fresh key pair for `algorithm`, returning `(private_key, public_key)` as raw
