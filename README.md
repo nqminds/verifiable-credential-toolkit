@@ -40,11 +40,7 @@ A typical VC workflow looks like this:
 └──────────┘         └──────────┘         └──────────┘
 ```
 
-1. An **Issuer** (e.g. a device manufacturer, certificate authority) creates a credential containing claims (e.g. "this device has ID X and model Y") and signs it with their private key.
-2. A **Holder** (e.g. the device owner) receives and stores the signed credential.
-3. A **Verifier** (e.g. a system accepting the device onto a network) checks the signature using the issuer's public key. If valid, the claims are trustworthy.
-
-This toolkit handles steps 1 and 3 — signing credentials and verifying them.
+An **issuer** signs a credential with their private key; a **holder** stores and presents it; a **verifier** checks the signature with the issuer's public key. This toolkit handles the issuer and verifier ends — signing and verifying.
 
 ---
 
@@ -243,37 +239,13 @@ The toolkit signs and verifies with these algorithms, selected via the [`Algorit
 | ML-DSA-65 (FIPS 204, cat. 3) | `MlDsa65` | 4032 | 1952 | `mldsa65-jcs-2025` |
 | ML-DSA-87 (FIPS 204, cat. 5) | `MlDsa87` | 4896 | 2592 | `mldsa87-jcs-2025` |
 
-ML-DSA (the NIST post-quantum signature standard) is provided via the `ml-dsa` crate, and is just another `Algorithm` — there is no separate ML-DSA API. The typed `SigningKey` / `VerifyingKey` carry their algorithm, are length-checked at construction, and pair with the same `sign` / `verify` used for Ed25519 (so the algorithm can't disagree with the key, and `verify` rejects a proof whose cryptosuite names a different algorithm):
-
-```rust
-let keypair = generate_keypair(Algorithm::MlDsa65);   // typed pair, algorithm carried by the key
-let signed = unsigned.sign(&keypair.signing_key)?;
-signed.verify(&keypair.verifying_key)?;
-```
-
-For HSM, cross-language, or wasm interop where keys are just bytes, use the raw-byte path: `generate_keypair_bytes(Algorithm)` plus `sign_with_algorithm` / `verify_with_algorithm` / `verify_auto`.
-
-```rust
-let (private_key, public_key) = generate_keypair_bytes(Algorithm::MlDsa65);
-let signed = unsigned.sign_with_algorithm(Algorithm::MlDsa65, &private_key)?;
-signed.verify_auto(&public_key)?;            // reads the algorithm from proof.cryptosuite
-```
-
-`verify_auto` dispatches on the proof's `cryptosuite`; `verify_with_algorithm` takes an explicit algorithm; `verify` reads it from the typed key. Ed25519 keys can still be loaded as raw 32-byte files (`{timestamp}.priv` / `.pub` from the CLI tools) via `SigningKey::new(Algorithm::Ed25519, &bytes)`.
+ML-DSA (the NIST post-quantum standard) comes from the `ml-dsa` crate and is just another `Algorithm` — no separate API. Typed keys carry their algorithm and use the same `sign` / `verify` as Ed25519; a raw-byte path (`generate_keypair_bytes`, `sign_with_algorithm`, `verify_auto`) covers HSM / wasm / cross-language interop. See [Usage](#usage) for both.
 
 > ⚠️ **Provisional ML-DSA cryptosuite identifiers.** The W3C `vc-di-mldsa` cryptosuite is still a Working Draft with no finalized identifier, multikey codec, or canonicalization choice. The `mldsa{44,65,87}-jcs-2025` strings above are a **bilateral convention** for closed deployments (e.g. NATO IC 2026 partners) — signing and verifying parties must agree on them out of band and document them; they are not interoperable with arbitrary third-party verifiers until the standard finalizes.
 
-### Bring-your-own / external signatures
-
-If you compute a signature outside the crate (e.g. in an HSM), call [`signing_payload`] to get the exact JCS bytes to sign, then wrap the result with `Proof::new_data_integrity(cryptosuite, proof_value)` (or `Proof::set_proof_value`) and `VerifiableCredential::from_parts(unsigned, proof)`. The `proofValue` is the **multibase (base58btc)** encoding of the raw signature bytes — i.e. `multibase::encode(Base58Btc, signature)`, a `z`-prefixed string.
-
 ### Canonical signing
 
-The signature is computed over the credential serialized with **JCS (JSON Canonicalization Scheme, [RFC 8785](https://www.rfc-editor.org/rfc/rfc8785))**, used by every cryptosuite above. Canonicalization sorts object keys and normalizes number formatting, so the signed bytes are independent of field ordering. This means a signature stays valid across a serialize/deserialize round-trip and across encodings (JSON, CBOR, Protobuf) — the proof is over the credential's canonical form, not the wire bytes. The emitted proof is a `DataIntegrityProof` whose `cryptosuite` matches the signing algorithm, with the signature stored as a multibase (base58btc) `proofValue`.
-
-Every algorithm works across all three formats. For CBOR and Protobuf, sign with `Cbor::sign(bytes, algorithm, private_key)` / `Protobuf::sign(...)` and verify with `Cbor::verify_auto(bytes, public_key)` (reads the cryptosuite) or `Cbor::verify(bytes, algorithm, public_key)`. Because the signature is over the format-independent JCS form, a credential signed in one format verifies in any other.
-
-ML-DSA signing is **hedged** (FIPS 204's randomized variant), so ML-DSA signatures are non-deterministic; Ed25519 signatures remain deterministic.
+Signatures are computed over the credential in **JCS canonical form** ([RFC 8785](https://www.rfc-editor.org/rfc/rfc8785)) — keys sorted, numbers normalized — so a signature survives a serialize/deserialize round-trip and is identical across JSON, CBOR, and Protobuf (the proof is over the canonical form, not the wire bytes). The proof is a `DataIntegrityProof` with a multibase (base58btc) `proofValue`. ML-DSA signing is **hedged** (non-deterministic); Ed25519 is deterministic.
 
 > **Compatibility note:** signatures are not interchangeable across encodings of the `proofValue`. 0.5.x signed over non-canonical JSON; 0.6.x used a base64 `proofValue`; **0.7.0** uses a **multibase** `proofValue`. Credentials issued by earlier versions must be re-signed. 0.7.0 is also breaking in that `verify` now rejects an unknown or missing `cryptosuite`, and `VcError::SignatureVerificationFailed` is a unit variant.
 
@@ -922,13 +894,10 @@ Working examples are included in the repository:
 | [`wasm_nodejs_example_usage/`](./wasm_nodejs_example_usage/) | Node.js signing, verification, and schema validation |
 | [`examples/`](./examples/)                                   | Rust examples (run with `cargo run --example`)       |
 
-Both examples are written in TypeScript and exercise the full WASM API:
-sign/verify, tamper + wrong-key rejection, JSON-Schema validation, validity
-periods, the `normalize_*` helpers, and the CBOR + Protobuf bindings. The
-CBOR/Protobuf sections do a full round-trip entirely in JS — encoding the
-credential object to bytes, decoding it back, signing, and verifying — so no
-pre-encoded fixtures are needed. The Node example self-checks every result (and
-exits non-zero on failure); the browser example renders each result on the page.
+Both WASM examples are TypeScript and exercise the full API — sign/verify, tamper
+and wrong-key rejection, schema validation, and the CBOR/Protobuf bindings. The
+Node example self-checks every result (non-zero exit on failure); the browser
+example renders results on the page.
 
 ### Running the Node.js Example
 
