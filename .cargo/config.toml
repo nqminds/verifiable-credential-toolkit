@@ -1,6 +1,8 @@
 # ML-DSA (FIPS 204) expands large matrices of polynomials on the stack. The default wasm
 # stack (~1 MB) overflows during key expansion/signing, surfacing as a wasm "memory access
-# out of bounds" trap. Raise the wasm stack to 8 MB so ML-DSA runs in the browser/Node.
+# out of bounds" trap. Raise the wasm stack to 16 MB so ML-DSA runs in the browser/Node.
+# Debug builds (e.g. `wasm-pack test --node` without `--release`) use much deeper frames, so
+# the extra headroom matters there; release builds need only a fraction of this.
 #
 # Hedged ML-DSA signing draws randomness via getrandom 0.4, whose wasm backend must be
 # selected explicitly with `getrandom_backend="wasm_js"` (in addition to the wasm_js
@@ -11,7 +13,7 @@
 [target.wasm32-unknown-unknown]
 rustflags = [
     "-C",
-    "link-arg=-zstack-size=8388608",
+    "link-arg=-zstack-size=16777216",
     "--cfg",
     'getrandom_backend="wasm_js"',
 ]
