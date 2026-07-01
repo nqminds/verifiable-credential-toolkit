@@ -343,15 +343,25 @@ mod wasm_tests {
     // actually calls — which the Rust-API tests above don't reach.
     use verifiable_credential_toolkit::wasm;
 
+    /// Serialize to a *plain* JS object (not an ES Map), the way a JS caller passes data in.
+    /// `serde_wasm_bindgen::to_value` defaults to Maps, which the JSON.stringify-based input
+    /// cleaning in the sign/encode entry points reads as `{}` — mirror the library's own
+    /// `serialize_maps_as_objects(true)`.
+    fn to_js(value: serde_json::Value) -> wasm_bindgen::JsValue {
+        use serde::Serialize;
+        value
+            .serialize(&serde_wasm_bindgen::Serializer::new().serialize_maps_as_objects(true))
+            .unwrap_or_else(|_| panic!("serialize to JsValue"))
+    }
+
     /// A sample credential as a JsValue, the way JS would pass one in.
     fn sample_credential_js() -> wasm_bindgen::JsValue {
-        serde_wasm_bindgen::to_value(&serde_json::json!({
+        to_js(serde_json::json!({
             "@context": ["https://www.w3.org/ns/credentials/v2"],
             "type": ["VerifiableCredential"],
             "issuer": "https://example.com/issuer",
             "credentialSubject": { "id": "urn:uuid:device-1", "name": "Sensor A", "count": 42 }
         }))
-        .unwrap_or_else(|_| panic!("credential to JsValue"))
     }
 
     /// generate_keypair → sign → verify over the JS ABI (Ed25519).
@@ -402,19 +412,13 @@ mod wasm_tests {
         let signed = wasm::sign(sample_credential_js(), &kp.signing_key())
             .unwrap_or_else(|_| panic!("js sign failed"));
 
-        let good = serde_wasm_bindgen::to_value(
-            &serde_json::json!({ "type": "object", "required": ["id", "name"] }),
-        )
-        .unwrap_or_else(|_| panic!("schema to JsValue"));
+        let good = to_js(serde_json::json!({ "type": "object", "required": ["id", "name"] }));
         assert!(
             wasm::verify_with_schema_check(signed.clone(), &kp.verifying_key(), good)
                 .unwrap_or_else(|_| panic!("verify_with_schema_check errored"))
         );
 
-        let bad = serde_wasm_bindgen::to_value(
-            &serde_json::json!({ "type": "object", "required": ["missing_field"] }),
-        )
-        .unwrap_or_else(|_| panic!("schema to JsValue"));
+        let bad = to_js(serde_json::json!({ "type": "object", "required": ["missing_field"] }));
         assert!(
             !wasm::verify_with_schema_check(signed, &kp.verifying_key(), bad)
                 .unwrap_or_else(|_| panic!("verify_with_schema_check errored")),
