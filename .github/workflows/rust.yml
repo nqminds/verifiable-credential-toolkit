@@ -11,10 +11,11 @@ jobs:
     name: cargo test
     runs-on: ubuntu-latest
     steps:
-      - name: Install wasm-pack
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - uses: actions/checkout@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+      # After the toolchain is set up: the wasm-pack installer needs rustup to exist.
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
       - run: cargo test --all-features
       # Release: debug ML-DSA on wasm uses very deep stack frames and overflows even the
       # raised wasm stack (a "memory access out of bounds" trap); release keeps stack usage
