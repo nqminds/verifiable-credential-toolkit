@@ -288,17 +288,24 @@ ML-DSA signing is **hedged** (FIPS 204's randomized variant), so ML-DSA signatur
 ```rust
 use verifiable_credential_toolkit::{generate_keypair, Algorithm};
 
+// Ed25519 (classical). The algorithm travels with each key.
 let keypair = generate_keypair(Algorithm::Ed25519);
+// Post-quantum instead — identical API, just a different Algorithm:
+// let keypair = generate_keypair(Algorithm::MlDsa44);
+// let keypair = generate_keypair(Algorithm::MlDsa65);
+// let keypair = generate_keypair(Algorithm::MlDsa87);
+
 // keypair.signing_key:   SigningKey   — keep secret
 // keypair.verifying_key: VerifyingKey — distribute to verifiers
+// Distinct types (a public key can't be passed where a private key is expected),
+// each carrying its Algorithm, so the same sign/verify works for every algorithm.
 
-// SigningKey and VerifyingKey are distinct types, so a public key can never be
-// passed where a private key is expected (and vice versa) — it's a compile error.
-// Each key carries its Algorithm, so the same sign/verify works for any algorithm.
-
-// Save the raw key bytes to files
+// Save the raw key bytes to files.
 std::fs::write("issuer.priv", keypair.signing_key.as_bytes()).unwrap();
 std::fs::write("issuer.pub", keypair.verifying_key.as_bytes()).unwrap();
+
+// Prefer raw bytes (HSM, wasm, or cross-language interop)? Skip the typed keys:
+// let (private_key, public_key) = generate_keypair_bytes(Algorithm::Ed25519);
 ```
 
 #### Construct a Credential
@@ -308,18 +315,32 @@ builder (which mirrors the `Proof` builder — required fields up front, optiona
 setters chained, then `.build()`):
 
 ```rust
-use verifiable_credential_toolkit::{Issuer, UnsignedVerifiableCredential};
+use verifiable_credential_toolkit::{Issuer, LanguageValue, UnsignedVerifiableCredential};
 use url::Url;
 use serde_json::json;
 
+// Option A — build it programmatically with the fluent builder.
 let unsigned_vc = UnsignedVerifiableCredential::builder(
     vec![Url::parse("https://www.w3.org/ns/credentials/v2").unwrap()],
     vec!["VerifiableCredential".to_string()],
     Issuer::Url(Url::parse("https://example.com/issuer").unwrap()),
+    // Or an issuer object carrying extra properties:
+    // Issuer::Object(IssuerObject { id: Url::parse("https://example.com/issuer").unwrap(),
+    //     additional_properties: Some(std::collections::HashMap::from([("name".into(), json!("Acme"))])) }),
     json!({ "id": "urn:uuid:device-1", "name": "Sensor A" }),
 )
 .id(Url::parse("urn:uuid:9a3e3c0e-2db0-412a-95c7-cf5520ba78df").unwrap())
+// Every optional field is a chainable setter before .build():
+// .name(LanguageValue::PlainString("Device Certificate".to_string()))
+// .description(LanguageValue::PlainString("Manufacturer-issued".to_string()))
+// .valid_from(chrono::Utc::now())
+// .valid_until(chrono::Utc::now() + chrono::Duration::days(365))
+// .credential_status(status)
+// .credential_schema(vec![credential_schema])
 .build();
+
+// Option B — deserialize one from JSON (a file, an API response, …):
+// let unsigned_vc: UnsignedVerifiableCredential = serde_json::from_str(vc_json)?;
 ```
 
 #### Sign a Credential
@@ -332,12 +353,16 @@ let vc_json = std::fs::read_to_string("credential.json").unwrap();
 let unsigned_vc: UnsignedVerifiableCredential =
     serde_json::from_str(&vc_json).expect("Invalid VC JSON");
 
-// Load private key (validates the length matches the algorithm)
+// Load a private key (length-checked against the algorithm). Pass the Algorithm
+// that matches the key you loaded — e.g. Algorithm::MlDsa65 for an ML-DSA-65 key.
 let signing_key = SigningKey::new(Algorithm::Ed25519, &std::fs::read("issuer.priv").unwrap())
     .expect("Invalid private key");
 
-// Sign — produces a VerifiableCredential with a proof attached
+// Sign — produces a VerifiableCredential with a DataIntegrityProof attached.
 let signed_vc = unsigned_vc.sign(&signing_key).expect("Signing failed");
+
+// Raw-bytes alternative (no typed key) — pass the algorithm and key bytes directly:
+// let signed_vc = unsigned_vc.sign_with_algorithm(Algorithm::Ed25519, &private_key_bytes)?;
 
 // Serialise and save
 let output = serde_json::to_string_pretty(&signed_vc).unwrap();
@@ -358,11 +383,64 @@ let signed_vc: VerifiableCredential =
 let verifying_key = VerifyingKey::new(Algorithm::Ed25519, &std::fs::read("issuer.pub").unwrap())
     .expect("Invalid public key");
 
-// Verify — checks signature AND validity period (validFrom/validUntil)
+// Verify — checks the signature, the validity period (validFrom/validUntil), and
+// that the proof's cryptosuite matches the key's algorithm.
 match signed_vc.verify(&verifying_key) {
     Ok(()) => println!("Credential is valid and untampered"),
     Err(e) => eprintln!("Verification failed: {}", e),
 }
+
+// Raw-bytes alternatives (public key as &[u8]):
+// signed_vc.verify_auto(&public_key_bytes)?;                              // reads the algorithm from proof.cryptosuite
+// signed_vc.verify_with_algorithm(Algorithm::Ed25519, &public_key_bytes)?; // caller asserts the algorithm
+```
+
+#### Sign & Verify in CBOR or Protobuf
+
+Every algorithm works across JSON, CBOR, and Protobuf. Each wire format is a
+`CredentialCodec`; because the signature is over the format-independent JCS
+canonical form, a credential signed in one format verifies in any other.
+
+```rust
+use verifiable_credential_toolkit::{
+    Algorithm,
+    bindings::{cbor::Cbor, protobuf::Protobuf, CredentialCodec},
+};
+
+// Encode an unsigned credential to CBOR, sign it, and verify — all on bytes.
+let unsigned_bytes = Cbor::encode_unsigned(&unsigned_vc)?;
+let signed_bytes = Cbor::sign(&unsigned_bytes, Algorithm::Ed25519, &private_key)?;
+Cbor::verify_auto(&signed_bytes, &public_key)?;   // reads the algorithm from the proof
+// Assert the algorithm explicitly instead:
+// Cbor::verify(&signed_bytes, Algorithm::Ed25519, &public_key)?;
+
+// Protobuf is the same trait — swap Cbor for Protobuf (and any algorithm):
+// let signed_pb = Protobuf::sign(&Protobuf::encode_unsigned(&unsigned_vc)?, Algorithm::MlDsa65, &private_key)?;
+// Protobuf::verify_auto(&signed_pb, &public_key)?;
+
+// Cross-format: re-encode a signed credential and it still verifies.
+// let as_protobuf = Protobuf::encode_signed(&Cbor::decode_signed(&signed_bytes)?)?;
+// Protobuf::verify_auto(&as_protobuf, &public_key)?;
+```
+
+#### Sign externally (HSM / out-of-process)
+
+Get the exact canonical bytes with `signing_payload`, sign them wherever the key
+lives, then wrap the raw signature in a proof — nothing else touches the key.
+
+```rust
+use verifiable_credential_toolkit::{Algorithm, Proof, VerifiableCredential};
+use multibase::Base;
+
+let payload = unsigned_vc.signing_payload()?;    // JCS-canonical bytes to sign
+let raw_signature: Vec<u8> = hsm_sign(&payload); // your HSM / external signer returns raw bytes
+
+let proof = Proof::new_data_integrity(
+    Algorithm::MlDsa65.cryptosuite(),
+    multibase::encode(Base::Base58Btc, raw_signature),
+);
+let signed_vc = VerifiableCredential::from_parts(unsigned_vc, proof);
+signed_vc.verify_auto(&public_key)?;
 ```
 
 #### Sign with JSON Schema Validation
@@ -385,20 +463,14 @@ let signing_key = SigningKey::new(Algorithm::Ed25519, &std::fs::read("issuer.pri
 let schema: serde_json::Value =
     serde_json::from_str(&std::fs::read_to_string("device_schema.json").unwrap()).unwrap();
 
-// Validate then sign — validate fails if credentialSubject doesn't match the schema
+// Validate then sign — validate fails (VcError::SchemaMismatch) if the
+// credentialSubject doesn't match the schema.
 unsigned_vc
     .validate(&SchemaSource::Inline(&schema))
+    // Other schema sources:
+    // .validate(&SchemaSource::Url("https://example.com/schemas/device.json"))  // fetched at validation time (native only)
+    // .validate(&SchemaSource::None)                                            // no-op — skip validation
     .expect("Schema validation failed");
-let signed_vc = unsigned_vc.sign(&signing_key).expect("Signing failed");
-```
-
-`SchemaSource` can also fetch a schema from a URL at validation time (native Rust
-only — the `Url` variant is not available in WASM):
-
-```rust
-unsigned_vc
-    .validate(&SchemaSource::Url("https://example.com/schemas/device.json"))
-    .expect("Failed to fetch schema or validate");
 let signed_vc = unsigned_vc.sign(&signing_key).expect("Signing failed");
 ```
 
@@ -412,14 +484,25 @@ use url::Url;
 
 let mut signed_vc = unsigned_vc.sign(&signing_key).unwrap();
 
-// Builder pattern
+// Builder pattern (consuming self, chainable).
 signed_vc.proof = signed_vc.proof
     .set_verification_method("did:example:issuer#key-1".to_string())
-    .set_crypto_suite("eddsa-jcs-2022".to_string())
     .set_created(Utc::now())
     .set_expires(Utc::now() + Duration::days(365))
     .set_domain(vec!["https://example.com".to_string()])
     .set_nonce(vec!["abc123".to_string()]);
+    // Other setters:
+    // .set_id(Url::parse("urn:uuid:...").unwrap())
+    // .set_proof_purpose("authentication".to_string())
+    // .set_challenge("challenge-from-verifier".to_string())
+    // .set_previous_proof("urn:uuid:prior-proof".to_string())
+
+// Or set fields directly:
+// signed_vc.proof.created = Some(Utc::now());
+// signed_vc.proof.domain = Some(vec!["https://example.com".to_string()]);
+
+// Note: don't change `cryptosuite` or `proofValue` after signing — that would make
+// the proof no longer match the signature.
 ```
 
 #### Build a Verifiable Presentation
@@ -436,6 +519,12 @@ let vp = VerifiablePresentation {
     presentation_type: vec!["VerifiablePresentation".to_string()],
     verifiable_credential: Some(vec![signed_vc]),
     holder: None,
+    // A holder as a bare URL, or an object with extra properties:
+    // holder: Some(Holder::Url(Url::parse("did:example:holder-123").unwrap())),
+    // holder: Some(Holder::Object(HolderObject {
+    //     id: Url::parse("did:example:holder-123").unwrap(),
+    //     additional_properties: None,
+    // })),
 };
 
 let vp_json = serde_json::to_string_pretty(&vp).unwrap();
@@ -589,6 +678,8 @@ wasm-bindgen --target nodejs --out-dir pkg \
 
         // Generate a fresh keypair
         const keypair = generate_keypair();
+        // Post-quantum: generate_keypair_for("ML-DSA-65"), then sign_with_algorithm +
+        // verify_auto. CBOR/Protobuf helpers (sign_cbor_vc, …) are exported too.
 
         // Define a credential
         const unsignedVC = {
@@ -629,6 +720,8 @@ import {
 
 // Generate keys (or load existing ones)
 const keypair = generate_keypair();
+// Post-quantum instead (label: "ML-DSA-44" | "ML-DSA-65" | "ML-DSA-87"):
+// const keypair = generate_keypair_for("ML-DSA-65");
 
 // Create a credential
 const unsignedVC = {
@@ -671,6 +764,19 @@ const isValidWithSchema = verify_with_schema_check(
   schema,
 );
 console.log("Valid with schema:", isValidWithSchema);
+
+// ── Other options (import the functions you use) ─────────────────────────
+// Any algorithm — pass a label and raw key bytes:
+// const signedVC = sign_with_algorithm(unsignedVC, "ML-DSA-65", keypair.signing_key());
+// const ok = verify_auto(signedVC, keypair.verifying_key());                    // reads the cryptosuite from the proof
+// const ok = verify_with_algorithm(signedVC, "ML-DSA-65", keypair.verifying_key());
+//
+// CBOR / Protobuf (operate on Uint8Array bytes; signed once, verifies in any format):
+// const cbor   = encode_unsigned_vc_to_cbor(unsignedVC);
+// const signed = sign_cbor_vc(cbor, keypair.signing_key());                     // Ed25519
+// const signed = sign_cbor_vc_with_algorithm(cbor, "ML-DSA-65", keypair.signing_key());
+// const ok     = verify_cbor_vc_auto(signed, keypair.verifying_key());
+// (…and encode_*_to_protobuf / sign_protobuf_vc[_with_algorithm] / verify_protobuf_vc_auto)
 ```
 
 #### TypeScript Types
