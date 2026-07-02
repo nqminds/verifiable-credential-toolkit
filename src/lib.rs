@@ -1,23 +1,22 @@
-use base64::{prelude::BASE64_STANDARD, Engine};
 use chrono::{DateTime, Utc};
-use ed25519_dalek::{
-    Signature, Signer, SigningKey as DalekSigningKey, Verifier, VerifyingKey as DalekVerifyingKey,
-};
-use rand::rngs::OsRng;
+use multibase::Base;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_with::formats::PreferOne;
 use serde_with::{serde_as, OneOrMany};
 use std::collections::HashMap;
-use std::fmt;
 use url::Url;
 
 pub mod bindings;
+pub mod crypto;
 pub mod error;
 pub mod proto_schemas;
 #[cfg(target_arch = "wasm32")]
 pub mod wasm;
 
+pub use crypto::{
+    generate_keypair, generate_keypair_bytes, Algorithm, KeyPair, SigningKey, VerifyingKey,
+};
 pub use error::VcError;
 
 /// A Verifiable Credential as defined by the W3C Verifiable Credentials Data Model v2.0 - <https://www.w3.org/TR/vc-data-model-2.0> WITHOUT the proof
@@ -267,16 +266,22 @@ pub struct Proof {
 }
 
 impl Proof {
-    /// Construct a default EdDSA data-integrity proof carrying the given base64-encoded
-    /// `proofValue`. Uses the `eddsa-jcs-2022` cryptosuite, matching the JCS (RFC 8785)
-    /// canonicalization [signing](UnsignedVerifiableCredential::sign) applies.
-    fn new_eddsa_jcs_2022(proof_value: String) -> Self {
+    /// Construct a `DataIntegrityProof` for the given `cryptosuite`, carrying the
+    /// multibase-encoded `proof_value`. This is the entry point for wrapping an
+    /// externally-computed signature (e.g. an ML-DSA signature produced out of process):
+    /// build the proof, attach it with [VerifiableCredential::from_parts], and the
+    /// credential serializes like any other.
+    ///
+    /// Defaults `proofPurpose` to `assertionMethod`; chain the `set_*` builders to
+    /// customize. The signature must be over the credential's
+    /// [signing_payload](UnsignedVerifiableCredential::signing_payload).
+    pub fn new_data_integrity(cryptosuite: &str, proof_value: String) -> Self {
         Proof {
             id: None,
             proof_type: "DataIntegrityProof".to_string(),
             proof_purpose: "assertionMethod".to_string(),
             verification_method: None,
-            cryptosuite: Some("eddsa-jcs-2022".to_string()),
+            cryptosuite: Some(cryptosuite.to_string()),
             created: None,
             expires: None,
             domain: None,
@@ -285,6 +290,11 @@ impl Proof {
             previous_proof: None,
             nonce: None,
         }
+    }
+
+    /// The `proofValue` string (the raw signature bytes, multibase base58btc-encoded).
+    pub fn proof_value(&self) -> &str {
+        &self.proof_value
     }
 
     /// Set the ID of the proof
@@ -350,6 +360,13 @@ impl Proof {
     /// Set the nonce of the proof
     pub fn set_nonce(mut self, nonce: Vec<String>) -> Self {
         self.nonce = Some(nonce);
+        self
+    }
+
+    /// Set the multibase-encoded `proofValue`. Use this to inject an externally-computed
+    /// signature (e.g. ML-DSA signed out of process) into a proof.
+    pub fn set_proof_value(mut self, proof_value: String) -> Self {
+        self.proof_value = proof_value;
         self
     }
 }
@@ -439,20 +456,45 @@ impl UnsignedVerifiableCredential {
     /// survives a serialize/deserialize round-trip and is portable across
     /// implementations. Without it, the unordered `additional_properties` maps on
     /// `issuer`/`holder` objects would serialize inconsistently and break verification.
-    fn signing_payload(&self) -> Result<Vec<u8>, VcError> {
+    ///
+    /// Exposed so an external signer (e.g. an ML-DSA implementation in another process or
+    /// HSM) can sign exactly these bytes, then wrap the result with
+    /// [Proof::new_data_integrity] / [VerifiableCredential::from_parts].
+    pub fn signing_payload(&self) -> Result<Vec<u8>, VcError> {
         Ok(serde_jcs::to_vec(self)?)
     }
 
-    /// Sign the Verifiable Credential with an Ed25519 [SigningKey], producing a
-    /// [VerifiableCredential] with a default proof and a computed `proofValue`.
+    /// Sign the Verifiable Credential with a [SigningKey], producing a
+    /// [VerifiableCredential] with a `DataIntegrityProof`. The algorithm (and so the
+    /// proof's `cryptosuite`) is taken from the key, so the same call signs with Ed25519 or
+    /// any ML-DSA parameter set. For raw-byte interop use
+    /// [sign_with_algorithm](UnsignedVerifiableCredential::sign_with_algorithm).
     ///
     /// This performs no schema validation; call
     /// [validate](UnsignedVerifiableCredential::validate) first if you need it.
     pub fn sign(self, signing_key: &SigningKey) -> Result<VerifiableCredential, VcError> {
-        let dalek_key = DalekSigningKey::from_bytes(&signing_key.0);
+        self.sign_with_algorithm(signing_key.algorithm(), signing_key.as_bytes())
+    }
+
+    /// Sign with the given [Algorithm] and a raw private key of the matching length
+    /// (Ed25519: 32-byte seed; ML-DSA: the FIPS 204 expanded signing key — 2560 / 4032 /
+    /// 4896 bytes for ML-DSA-44 / 65 / 87). The signature is taken over the JCS-canonical
+    /// credential and stored multibase base58btc-encoded in a `DataIntegrityProof` whose
+    /// `cryptosuite` is [Algorithm::cryptosuite].
+    ///
+    /// ML-DSA signing is hedged (FIPS 204 randomized variant) with an empty context, so
+    /// signatures are non-deterministic but remain verifiable by anyone.
+    pub fn sign_with_algorithm(
+        self,
+        algorithm: Algorithm,
+        private_key: &[u8],
+    ) -> Result<VerifiableCredential, VcError> {
         let message = self.signing_payload()?;
-        let signature = dalek_key.sign(&message);
-        let proof = Proof::new_eddsa_jcs_2022(BASE64_STANDARD.encode(signature.to_bytes()));
+        let signature = crypto::sign_bytes(algorithm, private_key, &message)?;
+        let proof = Proof::new_data_integrity(
+            algorithm.cryptosuite(),
+            multibase::encode(Base::Base58Btc, signature),
+        );
 
         Ok(VerifiableCredential {
             unsigned: self,
@@ -462,24 +504,21 @@ impl UnsignedVerifiableCredential {
 }
 
 impl VerifiableCredential {
+    /// Assemble a signed credential from an unsigned credential and a [Proof]. Use this to
+    /// attach an externally-computed proof (see [Proof::new_data_integrity]).
+    pub fn from_parts(unsigned: UnsignedVerifiableCredential, proof: Proof) -> Self {
+        Self { unsigned, proof }
+    }
+
     /// Removes the proof and returns the [UnsignedVerifiableCredential]
     pub fn to_unsigned(self) -> UnsignedVerifiableCredential {
         self.unsigned
     }
 
-    /// Validate the embedded `credentialSubject` against a [SchemaSource].
-    ///
-    /// Call this alongside [verify](VerifiableCredential::verify) when you need
-    /// schema validation, e.g. `vc.validate(&schema)?; vc.verify(key)?`.
-    pub fn validate(&self, schema: &SchemaSource) -> Result<(), VcError> {
-        self.unsigned.validate(schema)
-    }
-
-    /// Verifies the contents of a Verifiable Credential against a [VerifyingKey]
-    pub fn verify(&self, verifying_key: &VerifyingKey) -> Result<(), VcError> {
+    /// Reject the credential if the current time is outside its `validFrom`/`validUntil`
+    /// window. Shared by all verification entry points.
+    fn check_validity_period(&self) -> Result<(), VcError> {
         let now = Utc::now();
-
-        // Check if the current timestamp is within the validity period
         if let Some(valid_from) = self.unsigned.valid_from {
             if now < valid_from {
                 return Err(VcError::NotYetValid);
@@ -490,114 +529,65 @@ impl VerifiableCredential {
                 return Err(VcError::Expired);
             }
         }
-
-        let message = self.unsigned.signing_payload()?;
-        let proof_bytes = BASE64_STANDARD.decode(&self.proof.proof_value)?;
-        let signature = Signature::from_slice(&proof_bytes).map_err(VcError::MalformedSignature)?;
-        let dalek_key =
-            DalekVerifyingKey::from_bytes(&verifying_key.0).map_err(VcError::InvalidPublicKey)?;
-
-        dalek_key
-            .verify(&message, &signature)
-            .map_err(VcError::SignatureVerificationFailed)?;
         Ok(())
     }
-}
 
-/// A 32-byte Ed25519 private key, used to [sign](UnsignedVerifiableCredential::sign)
-/// credentials.
-///
-/// A distinct type from [VerifyingKey] so the two cannot be swapped by accident —
-/// passing a public key where a private key is expected (or vice versa) is a compile
-/// error rather than a silent runtime failure.
-#[derive(Clone)]
-pub struct SigningKey([u8; 32]);
-
-/// A 32-byte Ed25519 public key, used to [verify](VerifiableCredential::verify)
-/// credentials. See [SigningKey] for why this is a distinct type.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct VerifyingKey([u8; 32]);
-
-impl SigningKey {
-    /// Construct a signing key from exactly 32 bytes.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, VcError> {
-        let array: [u8; 32] = bytes
-            .try_into()
-            .map_err(|_| VcError::InvalidPrivateKeyLength)?;
-        Ok(Self(array))
+    /// Validate the embedded `credentialSubject` against a [SchemaSource].
+    ///
+    /// Call this alongside [verify](VerifiableCredential::verify) when you need
+    /// schema validation, e.g. `vc.validate(&schema)?; vc.verify(key)?`.
+    pub fn validate(&self, schema: &SchemaSource) -> Result<(), VcError> {
+        self.unsigned.validate(schema)
     }
 
-    /// The raw 32-byte representation of the key.
-    pub fn to_bytes(&self) -> [u8; 32] {
-        self.0
+    /// Verify the credential against a typed [VerifyingKey]. Checks the validity period,
+    /// that the proof's `cryptosuite` names the same algorithm as the key (rejecting, e.g.,
+    /// an ML-DSA-87 proof under an ML-DSA-44 key, or an ML-DSA proof under an Ed25519 key),
+    /// and the signature. A proof that carries no `cryptosuite` is rejected with
+    /// [VcError::MissingCryptosuite] rather than assumed. The algorithm is taken from the
+    /// key, so this works for Ed25519 and every ML-DSA parameter set; for raw-byte interop
+    /// use [verify_with_algorithm](VerifiableCredential::verify_with_algorithm) or
+    /// [verify_auto](VerifiableCredential::verify_auto).
+    pub fn verify(&self, verifying_key: &VerifyingKey) -> Result<(), VcError> {
+        match self.proof.cryptosuite.as_deref() {
+            Some(suite)
+                if Algorithm::from_cryptosuite(suite) == Some(verifying_key.algorithm()) => {}
+            Some(suite) => return Err(VcError::UnsupportedCryptosuite(suite.to_string())),
+            None => return Err(VcError::MissingCryptosuite),
+        }
+        self.verify_with_algorithm(verifying_key.algorithm(), verifying_key.as_bytes())
     }
-}
 
-impl VerifyingKey {
-    /// Construct a verifying key from exactly 32 bytes.
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, VcError> {
-        let array: [u8; 32] = bytes
-            .try_into()
-            .map_err(|_| VcError::InvalidPublicKeyLength)?;
-        Ok(Self(array))
+    /// Verify with an explicit [Algorithm] and a raw public key of the matching length
+    /// (Ed25519: 32 bytes; ML-DSA: the FIPS 204 public key — 1312 / 1952 / 2592 bytes for
+    /// ML-DSA-44 / 65 / 87). Checks the validity period and the signature; does **not**
+    /// require the proof's `cryptosuite` to match (the caller asserts the algorithm).
+    pub fn verify_with_algorithm(
+        &self,
+        algorithm: Algorithm,
+        public_key: &[u8],
+    ) -> Result<(), VcError> {
+        self.check_validity_period()?;
+
+        let message = self.unsigned.signing_payload()?;
+        let (_, signature) = multibase::decode(&self.proof.proof_value)
+            .map_err(|e| VcError::ProofDecode(e.to_string()))?;
+
+        crypto::verify_bytes(algorithm, public_key, &message, &signature)
     }
 
-    /// The raw 32-byte representation of the key.
-    pub fn to_bytes(&self) -> [u8; 32] {
-        self.0
-    }
-}
-
-impl From<[u8; 32]> for SigningKey {
-    fn from(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-}
-
-impl From<[u8; 32]> for VerifyingKey {
-    fn from(bytes: [u8; 32]) -> Self {
-        Self(bytes)
-    }
-}
-
-impl TryFrom<&[u8]> for SigningKey {
-    type Error = VcError;
-    fn try_from(bytes: &[u8]) -> Result<Self, VcError> {
-        Self::from_bytes(bytes)
-    }
-}
-
-impl TryFrom<&[u8]> for VerifyingKey {
-    type Error = VcError;
-    fn try_from(bytes: &[u8]) -> Result<Self, VcError> {
-        Self::from_bytes(bytes)
-    }
-}
-
-// Redact the secret in Debug output so it can't leak into logs.
-impl fmt::Debug for SigningKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str("SigningKey([REDACTED])")
-    }
-}
-
-/// An Ed25519 key pair produced by [generate_keypair].
-#[derive(Clone)]
-pub struct KeyPair {
-    /// The private key used to sign credentials.
-    pub signing_key: SigningKey,
-    /// The public key used to verify credentials.
-    pub verifying_key: VerifyingKey,
-}
-
-/// Generate a new Ed25519 [KeyPair].
-pub fn generate_keypair() -> KeyPair {
-    let mut csprng = OsRng;
-    let signing_key = DalekSigningKey::generate(&mut csprng);
-    let verifying_key = signing_key.verifying_key();
-
-    KeyPair {
-        signing_key: SigningKey(signing_key.to_bytes()),
-        verifying_key: VerifyingKey(verifying_key.to_bytes()),
+    /// Verify by reading the algorithm from the proof's `cryptosuite` and dispatching to
+    /// the right verifier — the caller supplies only the raw public key bytes. Returns
+    /// [VcError::UnsupportedCryptosuite] if the proof names a suite this library can't
+    /// verify.
+    pub fn verify_auto(&self, public_key: &[u8]) -> Result<(), VcError> {
+        let suite = self
+            .proof
+            .cryptosuite
+            .as_deref()
+            .ok_or(VcError::MissingCryptosuite)?;
+        let algorithm = Algorithm::from_cryptosuite(suite)
+            .ok_or_else(|| VcError::UnsupportedCryptosuite(suite.to_string()))?;
+        self.verify_with_algorithm(algorithm, public_key)
     }
 }

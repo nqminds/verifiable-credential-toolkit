@@ -6,18 +6,19 @@
 
 use url::Url;
 use verifiable_credential_toolkit::{
-    generate_keypair, UnsignedVerifiableCredential, VerifiableCredential, VerifiablePresentation,
+    generate_keypair, Algorithm, UnsignedVerifiableCredential, VerifiableCredential,
+    VerifiablePresentation,
 };
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // ── Step 1: Generate an Ed25519 keypair ─────────────────────────────
     println!("=== Step 1: Generate Ed25519 keypair ===\n");
-    let keypair = generate_keypair();
+    let keypair = generate_keypair(Algorithm::Ed25519);
     let signing_key = keypair.signing_key;
     let verifying_key = keypair.verifying_key;
     println!(
         "Public key (32 bytes): {:?}\n",
-        &verifying_key.to_bytes()[..8]
+        &verifying_key.as_bytes()[..8]
     );
 
     // ── Step 2: Define an unsigned Verifiable Credential ────────────────

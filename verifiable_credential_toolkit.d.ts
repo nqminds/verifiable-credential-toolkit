@@ -89,6 +89,47 @@ export function verify_with_schema_check(
   schema: any
 ): boolean;
 
+/**
+ * A signature algorithm label accepted by the multi-algorithm functions.
+ * Case- and separator-insensitive (e.g. "ML-DSA-65", "mldsa65" both work).
+ */
+export type AlgorithmLabel =
+  | "Ed25519"
+  | "ML-DSA-44"
+  | "ML-DSA-65"
+  | "ML-DSA-87";
+
+/** Generate a key pair for the given algorithm, returning raw key bytes. */
+export function generate_keypair_for(algorithm: AlgorithmLabel): KeyPair;
+
+/**
+ * Sign with the given algorithm and a raw private key of the matching length
+ * (Ed25519: 32 bytes; ML-DSA: the FIPS 204 expanded signing key — 2560 / 4032 / 4896
+ * bytes for ML-DSA-44 / 65 / 87).
+ */
+export function sign_with_algorithm(
+  unsigned_vc: UnsignedVerifiableCredential,
+  algorithm: AlgorithmLabel,
+  private_key: Uint8Array
+): VerifiableCredential;
+
+/** Verify with an explicit algorithm and a raw public key. False on any failure. */
+export function verify_with_algorithm(
+  signed_vc: VerifiableCredential,
+  algorithm: AlgorithmLabel,
+  public_key: Uint8Array
+): boolean;
+
+/**
+ * Verify by reading the algorithm from the proof's `cryptosuite` and dispatching
+ * automatically — the caller supplies only the raw public key bytes. False on any
+ * failure (including an unsupported cryptosuite).
+ */
+export function verify_auto(
+  signed_vc: VerifiableCredential,
+  public_key: Uint8Array
+): boolean;
+
 // CBOR bindings: encode/decode credentials to and from CBOR bytes, and sign/verify
 // CBOR-encoded credential bytes.
 export function encode_unsigned_vc_to_cbor(
@@ -133,6 +174,28 @@ export function sign_protobuf_vc(
 export function verify_protobuf_vc(
   signed_vc_protobuf: Uint8Array,
   public_key: VerifyingKey
+): boolean;
+
+// Multi-algorithm CBOR / Protobuf: sign with any supported cryptosuite (Ed25519 or
+// ML-DSA-44/65/87) and verify by reading the algorithm from the proof's cryptosuite.
+// Signatures are interoperable across JSON, CBOR, and Protobuf.
+export function sign_cbor_vc_with_algorithm(
+  unsigned_vc_cbor: Uint8Array,
+  algorithm: AlgorithmLabel,
+  private_key: Uint8Array
+): Uint8Array;
+export function verify_cbor_vc_auto(
+  signed_vc_cbor: Uint8Array,
+  public_key: Uint8Array
+): boolean;
+export function sign_protobuf_vc_with_algorithm(
+  unsigned_vc_protobuf: Uint8Array,
+  algorithm: AlgorithmLabel,
+  private_key: Uint8Array
+): Uint8Array;
+export function verify_protobuf_vc_auto(
+  signed_vc_protobuf: Uint8Array,
+  public_key: Uint8Array
 ): boolean;
 
 export function normalize_object(input: any): any;
